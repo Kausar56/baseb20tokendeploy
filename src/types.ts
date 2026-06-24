@@ -28,4 +28,5 @@ export interface DeployedToken extends TokenFormState {
   deployedAt: string;
   txHash: string;
   status: 'active' | 'paused';
+  chainId?: number;
 }

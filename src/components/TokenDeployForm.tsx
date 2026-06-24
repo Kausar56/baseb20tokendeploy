@@ -54,7 +54,9 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
   // Actual Web3 Transaction & Deployment State Management
   const { chain, chainId, isConnected } = useAccount();
   const { switchChain } = useSwitchChain();
-  const isBaseSepolia = isConnected && chainId === 84532;
+  const [selectedChainId, setSelectedChainId] = useState<number>(84532); // Default to Base Sepolia
+  const [showMainnetWarning, setShowMainnetWarning] = useState(false);
+  const isCorrectNetwork = isConnected && chainId === selectedChainId;
 
   const [deployStatus, setDeployStatus] = useState<'idle' | 'signing' | 'broadcasting' | 'mining' | 'success' | 'failed'>('idle');
   const [txErrorMsg, setTxErrorMsg] = useState<string | null>(null);
@@ -275,7 +277,8 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
       id: generatedAddress || Math.random().toString(36).substr(2, 9),
       deployedAt: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       txHash: prevTxHash || '0x' + Array.from({length: 64}, () => Math.floor(Math.random()*16).toString(16)).join(''),
-      status: 'active'
+      status: 'active',
+      chainId: selectedChainId
     };
     onDeploySuccess(newDeployedToken);
   };
@@ -1023,6 +1026,48 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
             <span>Fee Estimator</span>
           </div>
 
+          {/* Network Selection Control */}
+          <div className="space-y-2 pb-2 border-b border-slate-900/60">
+            <span className="block text-xs font-semibold text-slate-400">
+              Deployment Target Network
+            </span>
+            <div className="grid grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => setSelectedChainId(84532)}
+                className={`flex flex-col items-start p-3 rounded-xl border text-left transition-all relative overflow-hidden cursor-pointer ${
+                  selectedChainId === 84532
+                    ? 'border-emerald-500/50 bg-emerald-950/15'
+                    : 'border-slate-800 bg-slate-900/40 text-slate-400 hover:bg-slate-900/60'
+                }`}
+              >
+                <div className="flex items-center space-x-1.5">
+                  <span className={`h-2 w-2 rounded-full ${selectedChainId === 84532 ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`}></span>
+                  <span className="text-xs font-bold text-white">Base Sepolia</span>
+                </div>
+                <span className="text-[9px] text-slate-500 mt-1">Deploy securely on Testnet (Free)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMainnetWarning(true);
+                }}
+                className={`flex flex-col items-start p-3 rounded-xl border text-left transition-all relative overflow-hidden cursor-pointer ${
+                  selectedChainId === 8453
+                    ? 'border-blue-500/50 bg-blue-950/15'
+                    : 'border-slate-800 bg-slate-900/40 text-slate-400 hover:bg-slate-900/60'
+                }`}
+              >
+                <div className="flex items-center space-x-1.5">
+                  <span className={`h-2 w-2 rounded-full ${selectedChainId === 8453 ? 'bg-blue-400 animate-pulse' : 'bg-slate-600'}`}></span>
+                  <span className="text-xs font-bold text-white">Base Mainnet</span>
+                </div>
+                <span className="text-[9px] text-slate-500 mt-1">Deploy on real Network (Gas)</span>
+              </button>
+            </div>
+          </div>
+
           <div className="space-y-2 text-sm">
             <div className="flex justify-between items-center text-slate-400">
               <span className="flex items-center space-x-1">
@@ -1042,9 +1087,17 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
 
             <div className="flex justify-between items-center text-slate-400">
               <span>Selected Network</span>
-              <span className={`flex items-center space-x-1.5 font-bold ${isBaseSepolia ? 'text-emerald-400' : 'text-amber-500'}`}>
-                <span className={`h-2 w-2 rounded-full ${isBaseSepolia ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>
-                <span>{isConnected ? (chain?.name || 'Unknown Chain') : 'Base Sepolia Testnet'}</span>
+              <span className={`flex items-center space-x-1.5 font-bold ${selectedChainId === 84532 ? 'text-emerald-400' : 'text-blue-400'}`}>
+                <span className={`h-2 w-2 rounded-full ${selectedChainId === 84532 ? 'bg-emerald-500' : 'bg-blue-500'}`}></span>
+                <span>{selectedChainId === 84532 ? 'Base Sepolia Testnet' : 'Base Mainnet'}</span>
+              </span>
+            </div>
+
+            <div className="flex justify-between items-center text-slate-400">
+              <span>Connected Wallet Network</span>
+              <span className={`flex items-center space-x-1.5 font-bold ${isConnected ? (isCorrectNetwork ? 'text-emerald-400' : 'text-amber-500') : 'text-slate-500'}`}>
+                <span className={`h-2 w-2 rounded-full ${isConnected ? (isCorrectNetwork ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500') : 'bg-slate-700'}`}></span>
+                <span>{isConnected ? (chain?.name || `Chain ID ${chainId}`) : 'Not Connected'}</span>
               </span>
             </div>
 
@@ -1064,41 +1117,43 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
           <button
             id="deploy-token-action-btn"
             onClick={triggerDeploy}
-            disabled={!walletAddress || !isBaseSepolia || !validationResult.isValid}
+            disabled={!walletAddress || !isCorrectNetwork || !validationResult.isValid}
             className={`w-full mt-4 flex items-center justify-center space-x-2.5 rounded-xl py-4 font-bold text-white transition-all ${
-              (walletAddress && isBaseSepolia && validationResult.isValid)
+              (walletAddress && isCorrectNetwork && validationResult.isValid)
                 ? 'bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-950/40 active:scale-95 cursor-pointer' 
                 : 'bg-slate-900 border border-slate-800 text-slate-500 cursor-not-allowed opacity-60'
             }`}
           >
-            <Play className={`h-4.5 w-4.5 fill-current ${walletAddress && isBaseSepolia ? 'text-white' : 'text-slate-600'}`} />
+            <Play className={`h-4.5 w-4.5 fill-current ${walletAddress && isCorrectNetwork ? 'text-white' : 'text-slate-600'}`} />
             <span>
               {!walletAddress 
                 ? 'Deploy Token (Wallet Disconnected)' 
-                : !isBaseSepolia 
+                : !isCorrectNetwork 
                 ? 'Deploy Token (Unsupported Network)' 
-                : 'Deploy Token on Base Sepolia'}
+                : selectedChainId === 84532
+                ? 'Deploy Token on Base Sepolia'
+                : 'Deploy Token on Base Mainnet'}
             </span>
           </button>
 
-          {walletAddress && !isBaseSepolia && (
+          {walletAddress && !isCorrectNetwork && (
             <div className="space-y-3 mt-3">
               <div className="flex items-start space-x-2.5 rounded-xl border border-amber-500/20 bg-amber-950/10 p-3.5 text-xs text-amber-500 leading-relaxed">
                 <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                 <span>
-                  <strong>Base Sepolia network protection active:</strong> B20 token deployments are permitted only on the Base Sepolia Testnet to avoid accidental gas or fee expenditures on unsupported networks.
+                  <strong>Network Mismatch Detected:</strong> Your wallet is connected to <strong>{chain?.name || `Chain ID ${chainId}`}</strong>, but your deployment selection is set to <strong>{selectedChainId === 84532 ? 'Base Sepolia Testnet' : 'Base Mainnet'}</strong>.
                 </span>
               </div>
               <button
                 onClick={() => {
                   if (switchChain) {
-                    switchChain({ chainId: 84532 });
+                    switchChain({ chainId: selectedChainId });
                   }
                 }}
                 className="w-full flex items-center justify-center space-x-2 rounded-xl py-3.5 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer"
               >
                 <RefreshCw className="h-4 w-4 animate-spin-slow" />
-                <span>Switch to Base Sepolia Testnet</span>
+                <span>Switch to {selectedChainId === 84532 ? 'Base Sepolia Testnet' : 'Base Mainnet'}</span>
               </button>
             </div>
           )}
@@ -1110,7 +1165,7 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
             </div>
           )}
 
-          {walletAddress && isBaseSepolia && !validationResult.isValid && (
+          {walletAddress && isCorrectNetwork && !validationResult.isValid && (
             <div className="flex items-start space-x-2.5 rounded-xl border border-rose-500/20 bg-rose-950/10 p-3.5 text-xs text-rose-500">
               <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
               <div className="space-y-1">
@@ -1298,7 +1353,7 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
                     <span className="text-[10px] font-mono text-slate-400 select-all break-all">{txHashState.slice(0, 16)}...{txHashState.slice(-8)}</span>
                   </div>
                   <a
-                    href={`https://basescan.org/tx/${txHashState}`}
+                    href={selectedChainId === 84532 ? `https://sepolia.basescan.org/tx/${txHashState}` : `https://basescan.org/tx/${txHashState}`}
                     target="_blank"
                     referrerPolicy="no-referrer"
                     className="text-[10px] font-bold text-blue-400 hover:text-blue-300 transition-colors flex items-center space-x-0.5"
@@ -1331,6 +1386,75 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
                 </motion.div>
               )}
 
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* BASE MAINNET WARNING MODAL */}
+      <AnimatePresence>
+        {showMainnetWarning && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowMainnetWarning(false)}
+              className="fixed inset-0 bg-black/90 backdrop-blur-md"
+            />
+
+            {/* Modal Box */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-amber-500/30 bg-slate-950 p-6 shadow-2xl space-y-5"
+            >
+              <div className="flex items-center space-x-3 text-amber-500 pb-1 border-b border-slate-900">
+                <AlertCircle className="h-6 w-6 shrink-0" />
+                <h3 className="font-display text-base font-bold text-white">Base Mainnet Warning</h3>
+              </div>
+
+              <div className="space-y-3.5 text-xs text-slate-400 leading-relaxed">
+                <p>
+                  You are switching the deployment target to <strong className="text-white">Base Mainnet (Chain ID 8453)</strong>.
+                </p>
+                <div className="bg-amber-950/15 border border-amber-500/10 rounded-xl p-3 text-amber-400 space-y-2">
+                  <span className="font-bold block text-xs">⚠️ Crucial Notice</span>
+                  <p className="text-[11px] leading-relaxed">
+                    Deployments on Base Mainnet require real ETH for transaction fees and service validation. All deployed smart contracts are irreversible, immutable, and live on the public main network.
+                  </p>
+                </div>
+                <p>
+                  If you only want to test the token launch experience safely, please stay on <strong className="text-emerald-400">Base Sepolia Testnet</strong>, which uses free testnet ETH.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowMainnetWarning(false);
+                  }}
+                  className="w-full py-3 rounded-xl border border-slate-800 hover:bg-slate-900 text-slate-300 font-bold text-xs transition-colors cursor-pointer text-center"
+                >
+                  Stay on Sepolia
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedChainId(8453);
+                    setShowMainnetWarning(false);
+                    if (switchChain) {
+                      switchChain({ chainId: 8453 });
+                    }
+                  }}
+                  className="w-full py-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs transition-colors cursor-pointer text-center shadow-lg shadow-amber-950/20"
+                >
+                  Proceed to Mainnet
+                </button>
+              </div>
             </motion.div>
           </div>
         )}

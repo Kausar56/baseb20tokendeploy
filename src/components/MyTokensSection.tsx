@@ -200,6 +200,15 @@ export default function MyTokensSection({
                         <span className="font-mono text-xs text-slate-500 uppercase tracking-widest bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
                           {token.symbol}
                         </span>
+                        {token.chainId === 8453 ? (
+                          <span className="text-[9px] font-bold text-blue-400 bg-blue-950/40 border border-blue-900/30 px-1.5 py-0.5 rounded-full">
+                            Mainnet
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-bold text-emerald-400 bg-emerald-950/40 border border-emerald-900/30 px-1.5 py-0.5 rounded-full">
+                            Sepolia
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-slate-500 mt-0.5 font-medium flex items-center space-x-1.5">
                         <span>Class: {token.tokenType} B20</span>
@@ -409,7 +418,7 @@ export default function MyTokensSection({
                             {/* View in block explorer button */}
                             <div className="pt-3 border-t border-slate-900">
                               <a
-                                href={`https://basescan.org/tx/${token.txHash}`}
+                                href={token.chainId === 8453 ? `https://basescan.org/tx/${token.txHash}` : `https://sepolia.basescan.org/tx/${token.txHash}`}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="w-full flex items-center justify-center space-x-1 text-[10px] font-bold text-slate-400 hover:text-white transition-colors bg-slate-900 hover:bg-slate-800/80 py-2 rounded-lg border border-slate-800"
