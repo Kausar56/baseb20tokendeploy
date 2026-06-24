@@ -9,6 +9,8 @@ import { useAccount, useWriteContract, useWaitForTransactionReceipt, useSwitchCh
 import { isAddress } from 'viem';
 import { TokenFormState, TokenType, DeployedToken } from '../types';
 import { B20DeploymentService } from '../services/b20DeploymentService';
+import { getB20DeploymentPayload } from '../lib/b20/deploy';
+import { B20DeploymentParams } from '../lib/b20/types';
 
 interface TokenDeployFormProps {
   walletAddress: string | null;
@@ -78,10 +80,10 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Real-time calculations from our B20 deployment service layer
-  const validationResult = B20DeploymentService.validateForm(form, walletAddress);
-  const preparedPayload = B20DeploymentService.prepareDeploymentPayload(form, walletAddress);
-  const preparedSummary = B20DeploymentService.generateDeploymentSummary(form, walletAddress);
-  const transactionPreview = B20DeploymentService.generateTransactionPreview(form, preparedPayload, walletAddress);
+  const validationResult = B20DeploymentService.validateForm(form, walletAddress, selectedChainId);
+  const preparedPayload = B20DeploymentService.prepareDeploymentPayload(form, walletAddress, selectedChainId);
+  const preparedSummary = B20DeploymentService.generateDeploymentSummary(form, walletAddress, selectedChainId);
+  const transactionPreview = B20DeploymentService.generateTransactionPreview(form, preparedPayload, walletAddress, selectedChainId);
 
   // Synced address when wallet changes
   React.useEffect(() => {
@@ -210,12 +212,12 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
     setDeployStatus('signing');
     setDeployStep(0);
 
-    const factoryAddress = B20DeploymentService.FACTORY_ADDRESS;
+    const factoryAddress = B20DeploymentService.getFactoryAddress(selectedChainId);
     console.log("Factory Address", factoryAddress);
 
     // 1. Validate Factory Address
-    if (!factoryAddress || factoryAddress.trim() === '' || factoryAddress.toLowerCase() === '0xb20fac701726aa36979a7c8e9b67b1406deb2000' || !isAddress(factoryAddress)) {
-      setError("Official B20 Factory Address not configured.");
+    if (!factoryAddress || !isAddress(factoryAddress)) {
+      setError("B20 Factory Not Configured");
       setIsDeploying(false);
       setDeployStatus('failed');
       return;
@@ -237,41 +239,35 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
       const serviceFeeValue = form.tokenType === 'Stablecoin' ? 0.0009 : 0.0012;
       const valueWei = BigInt(Math.floor(serviceFeeValue * 1e18));
 
-      // Invoke the real Base B20 deployment contract method
+      const deploymentParams: B20DeploymentParams = {
+        name: form.name,
+        symbol: form.symbol.toUpperCase(),
+        decimals: decimalsNum,
+        initialSupply: initialSupplyBigInt,
+        maxSupply: maxSupplyBigInt,
+        treasury: form.treasuryWallet as `0x${string}`,
+        owner: form.ownerWallet as `0x${string}`,
+        featureFlags: featureFlagsByte
+      };
+
+      const variant = form.tokenType === 'Stablecoin' ? 1 : 0;
+      const salt = preparedPayload.create2Salt as `0x${string}`;
+
+      const payload = getB20DeploymentPayload(
+        deploymentParams,
+        selectedChainId,
+        valueWei,
+        variant,
+        salt
+      );
+
+      // Invoke the real Base B20 deployment contract method using createB20 precompile
       const hash = await writeContractAsync({
-        address: factoryAddress as `0x${string}`,
-        abi: [
-          {
-            name: 'deployB20Token',
-            type: 'function',
-            stateMutability: 'payable',
-            inputs: [
-              { name: 'name', type: 'string' },
-              { name: 'symbol', type: 'string' },
-              { name: 'decimals', type: 'uint8' },
-              { name: 'initialSupply', type: 'uint256' },
-              { name: 'maxSupply', type: 'uint256' },
-              { name: 'treasury', type: 'address' },
-              { name: 'owner', type: 'address' },
-              { name: 'featureFlags', type: 'uint8' }
-            ],
-            outputs: [
-              { name: 'tokenAddress', type: 'address' }
-            ]
-          }
-        ] as const,
-        functionName: 'deployB20Token',
-        args: [
-          form.name,
-          form.symbol.toUpperCase(),
-          decimalsNum,
-          initialSupplyBigInt,
-          maxSupplyBigInt,
-          form.treasuryWallet as `0x${string}`,
-          form.ownerWallet as `0x${string}`,
-          featureFlagsByte
-        ],
-        value: valueWei,
+        address: payload.address,
+        abi: payload.abi,
+        functionName: payload.functionName,
+        args: payload.args,
+        value: payload.value,
       } as any);
 
       // Signature complete

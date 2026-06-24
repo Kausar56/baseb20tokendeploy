@@ -1,5 +1,7 @@
 import { TokenFormState, TokenType } from '../types';
 import { isAddress } from 'viem';
+import { getB20FactoryConfig } from '../lib/b20/factory';
+import { B20_FACTORY_ABI } from '../lib/b20/constants';
 
 /**
  * Interface representing the prepared deployment payload
@@ -73,14 +75,26 @@ export interface B20TransactionPreview {
 }
 
 export class B20DeploymentService {
-  // B20 Standard Factory contract on Base Mainnet
-  public static readonly FACTORY_ADDRESS = (import.meta.env?.VITE_B20_FACTORY_ADDRESS || '') as string;
-  
-  // B20 Standard Registry contract on Base Mainnet
-  public static readonly REGISTRY_ADDRESS = (import.meta.env?.VITE_B20_REGISTRY_ADDRESS || '') as string;
+  // Dynamically resolves B20 Factory Contract address
+  public static getFactoryAddress(chainId?: number): string {
+    if (!chainId) return '';
+    const config = getB20FactoryConfig(chainId);
+    return config.factoryAddress || '';
+  }
+
+  // B20 Standard Registry contract on Base
+  public static readonly REGISTRY_ADDRESS = (
+    (import.meta as any).env?.NEXT_PUBLIC_B20_REGISTRY_ADDRESS || 
+    (import.meta as any).env?.VITE_B20_REGISTRY_ADDRESS || 
+    ''
+  ) as string;
 
   // Base network native Sequencer contract
-  public static readonly SEQUENCER_ADDRESS = (import.meta.env?.VITE_B20_SEQUENCER_ADDRESS || '') as string;
+  public static readonly SEQUENCER_ADDRESS = (
+    (import.meta as any).env?.NEXT_PUBLIC_B20_SEQUENCER_ADDRESS || 
+    (import.meta as any).env?.VITE_B20_SEQUENCER_ADDRESS || 
+    ''
+  ) as string;
   
   // Standard fees in ETH
   private static readonly L1_GAS_FEE = 0.00008;
@@ -111,13 +125,23 @@ export class B20DeploymentService {
   /**
    * Validates the input form state and returns warning/error lists
    */
-  public static validateForm(form: TokenFormState, walletAddress: string | null): {
+  public static validateForm(form: TokenFormState, walletAddress: string | null, chainId?: number): {
     isValid: boolean;
     errors: string[];
     warnings: string[];
   } {
     const errors: string[] = [];
     const warnings: string[] = [];
+
+    // Factory Configuration Check
+    if (chainId) {
+      const config = getB20FactoryConfig(chainId);
+      if (!config.isConfigured || !config.factoryAddress) {
+        errors.push('B20 Factory Not Configured');
+      }
+    } else {
+      errors.push('B20 Factory Not Configured');
+    }
 
     // Wallet connection validation
     if (!walletAddress) {
@@ -173,7 +197,7 @@ export class B20DeploymentService {
     }
 
     if (form.blocklist && !form.allowlist) {
-      warnings.push('Blocklist is enabled without an active allowlist. Ensure admin addresses are properly maintained to avoid censorship loops.');
+      warnings.push('Malicious blocklist enabled without KYC allowlist. In most regulatory frameworks, a lock-out mechanism requires structured authorization.');
     }
 
     return {
@@ -191,16 +215,14 @@ export class B20DeploymentService {
     symbol: string,
     saltHex: string
   ): string {
-    // Standard simulation of CREATE2 hash calculation
-    // keccak256(0xff + deployer + salt + keccak256(bytecode))
+    if (!owner || !isAddress(owner)) {
+      return '0x0000000000000000000000000000000000000000';
+    }
     const cleanOwner = owner.toLowerCase().replace('0x', '');
     const cleanSalt = saltHex.toLowerCase().replace('0x', '');
     
     // Generate deterministic looking address based on input hashes
     let hashSource = cleanOwner + symbol.toLowerCase() + cleanSalt;
-    let finalHash = '';
-    
-    // Simple mock hash function for predictable output inside preview
     let sum = 0;
     for (let i = 0; i < hashSource.length; i++) {
       sum += hashSource.charCodeAt(i);
@@ -212,13 +234,13 @@ export class B20DeploymentService {
       const idx = (sum + i * 17) % 16;
       mockHex += hexChars[idx];
     }
-    return mockHex.slice(0, 42);
+    return '0x' + mockHex.slice(0, 40);
   }
 
   /**
    * Prepares the full structured token deployment payload
    */
-  public static prepareDeploymentPayload(form: TokenFormState, walletAddress: string | null): B20DeploymentPayload {
+  public static prepareDeploymentPayload(form: TokenFormState, walletAddress: string | null, chainId?: number): B20DeploymentPayload {
     const decimals = Number(form.decimals) || 18;
     const initialSupplyBigInt = BigInt(form.totalSupply || '0') * (10n ** BigInt(decimals));
     const maxSupplyBigInt = BigInt(form.maxSupply || '0') * (10n ** BigInt(decimals));
@@ -229,7 +251,7 @@ export class B20DeploymentService {
     const saltHex = '0x' + saltNum.toString(16).padStart(64, '0');
     
     const predictedAddress = B20DeploymentService.predictCreate2Address(
-      form.ownerWallet,
+      form.ownerWallet || walletAddress || '',
       form.symbol,
       saltHex
     );
@@ -253,8 +275,8 @@ export class B20DeploymentService {
         decimals,
         initialSupply: initialSupplyBigInt.toString(),
         maxSupply: maxSupplyBigInt.toString(),
-        treasury: form.treasuryWallet,
-        owner: form.ownerWallet,
+        treasury: form.treasuryWallet || walletAddress || '',
+        owner: form.ownerWallet || walletAddress || '',
         featureFlagsByte: '0x' + featureFlagsByte.toString(16).padStart(2, '0'),
       },
       create2Salt: saltHex,
@@ -266,7 +288,7 @@ export class B20DeploymentService {
   /**
    * Prepares the full structured token deployment summary
    */
-  public static generateDeploymentSummary(form: TokenFormState, walletAddress: string | null): B20DeploymentSummary {
+  public static generateDeploymentSummary(form: TokenFormState, walletAddress: string | null, chainId?: number): B20DeploymentSummary {
     const serviceFee = form.tokenType === 'Stablecoin' ? 0.0009 : 0.0012;
     const totalEth = (B20DeploymentService.L1_GAS_FEE + B20DeploymentService.L2_GAS_FEE + serviceFee);
     const totalUsd = totalEth * B20DeploymentService.ETH_TO_USD_RATE;
@@ -291,7 +313,7 @@ export class B20DeploymentService {
       activeFeatures.push({ name: 'B20 Memo Payloads', description: 'Enables custom transaction notes on Base network transfers.', category: 'utility' });
     }
 
-    const { errors, warnings } = B20DeploymentService.validateForm(form, walletAddress);
+    const { errors, warnings } = B20DeploymentService.validateForm(form, walletAddress, chainId);
 
     return {
       tokenName: form.name,
@@ -299,8 +321,8 @@ export class B20DeploymentService {
       tokenClass: form.tokenType,
       totalSupplyFormatted: parseFloat(form.totalSupply || '0').toLocaleString(),
       maxSupplyFormatted: parseFloat(form.maxSupply || '0').toLocaleString(),
-      ownerWallet: form.ownerWallet,
-      treasuryWallet: form.treasuryWallet,
+      ownerWallet: form.ownerWallet || walletAddress || '',
+      treasuryWallet: form.treasuryWallet || walletAddress || '',
       decimals: Number(form.decimals) || 18,
       activeFeatures,
       costEstimation: {
@@ -324,67 +346,34 @@ export class B20DeploymentService {
   public static generateTransactionPreview(
     form: TokenFormState,
     payload: B20DeploymentPayload,
-    walletAddress: string | null
+    walletAddress: string | null,
+    chainId?: number
   ): B20TransactionPreview {
     const serviceFee = form.tokenType === 'Stablecoin' ? 0.0009 : 0.0012;
     const valueWei = (BigInt(Math.floor(serviceFee * 1e18))).toString(); // factory fee sent as transaction msg.value
 
-    // Build standard pseudo ABI encoded bytes matching B20 Factory structure
-    // deployB20Token(string name, string symbol, uint8 decimals, uint256 initialSupply, uint256 maxSupply, address treasury, address owner, uint8 featureFlags)
-    // Selector for deployB20Token: 0x51ab84b5
-    let abiHex = '0x51ab84b5';
-    
-    // Dynamic mock padding function mimicking EVM slot encoding (32 bytes / 64 characters)
-    const padUint256 = (val: string | number) => {
-      let cleanVal = typeof val === 'number' ? val.toString(16) : BigInt(val).toString(16);
-      return cleanVal.padStart(64, '0');
-    };
-    
-    const padAddress = (addr: string) => {
-      return addr.toLowerCase().replace('0x', '').padStart(64, '0');
-    };
+    const factoryAddress = B20DeploymentService.getFactoryAddress(chainId);
 
-    const stringToHex = (str: string): string => {
-      let hex = '';
-      for (let i = 0; i < str.length; i++) {
-        hex += str.charCodeAt(i).toString(16).padStart(2, '0');
-      }
-      return hex;
-    };
-
-    // Constructor parameters layout
-    abiHex += padUint256(form.decimals); // Decimals slot
-    abiHex += padUint256(payload.constructorArgs.initialSupply); // Initial supply slot
-    abiHex += padUint256(payload.constructorArgs.maxSupply); // Max supply slot
-    abiHex += padAddress(form.treasuryWallet); // Treasury slot
-    abiHex += padAddress(form.ownerWallet); // Owner slot
-    abiHex += padUint256(B20DeploymentService.computeFeatureFlagsByte(form)); // Features flag slot
-    
-    // Strings are offset, lets represent that concisely
-    abiHex += '...[ABI String Offset Encoded Name: ' + stringToHex(form.name).slice(0, 16) + ']...';
-    abiHex += '[ABI String Offset Encoded Symbol: ' + stringToHex(form.symbol).slice(0, 8) + ']';
+    const variant = form.tokenType === 'Stablecoin' ? 1 : 0;
+    const salt = payload.create2Salt;
 
     return {
-      toAddress: B20DeploymentService.FACTORY_ADDRESS,
+      toAddress: factoryAddress,
       fromAddress: walletAddress || '0x0000000000000000000000000000000000000000',
-      functionName: 'deployB20Token',
-      functionSignature: 'deployB20Token(string name, string symbol, uint8 decimals, uint256 initialSupply, uint256 maxSupply, address treasury, address owner, uint8 featureFlags)',
+      functionName: 'createB20',
+      functionSignature: 'createB20(uint8 variant, bytes32 salt, bytes params, bytes[] initCalls)',
       functionArguments: [
-        form.name,
-        form.symbol.toUpperCase(),
-        form.decimals.toString(),
-        payload.constructorArgs.initialSupply,
-        payload.constructorArgs.maxSupply,
-        form.treasuryWallet,
-        form.ownerWallet,
-        payload.constructorArgs.featureFlagsByte
+        variant.toString(),
+        salt,
+        `[Encoded ${form.tokenType}CreateParams (Length: ${form.name.length + form.symbol.length + 8} bytes)]`,
+        `[4 Initialization Calls: Grant Admin, Grant Minter, Mint Initial Supply, Update Supply Cap]`
       ],
-      rawCallDataHex: abiHex,
-      gasLimitEstimate: 210000 + (form.tokenType === 'Stablecoin' ? 62000 : 84000),
+      rawCallDataHex: `0xbc840a45${variant.toString(16).padStart(64, '0')}${salt.replace('0x', '').padStart(64, '0')}...`,
+      gasLimitEstimate: 180000 + (form.tokenType === 'Stablecoin' ? 50000 : 70000),
       maxFeePerGasGwei: 0.12, // Optimism L2 gas is extremely cheap
       maxPriorityFeePerGasGwei: 0.005,
       valueWei,
-      isReadyForSigning: walletAddress !== null,
+      isReadyForSigning: walletAddress !== null && factoryAddress !== '',
     };
   }
 }
