@@ -227,7 +227,7 @@ export default function App() {
                   Deploy Custom B20 Token
                 </h1>
                 <p className="text-slate-400 text-sm">
-                  Launch standard utility assets, stablecoins, or RWA tokens instantly on Base Mainnet. Ensure a Web3 wallet is connected to authorize deployment signatures.
+                  Launch standard utility assets, stablecoins, or RWA tokens instantly on Base Sepolia Testnet. Ensure a Web3 wallet is connected to authorize deployment signatures.
                 </p>
               </div>
 
