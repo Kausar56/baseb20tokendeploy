@@ -1,10 +1,12 @@
 import React, { useState, useRef } from 'react';
 import { 
   HelpCircle, Upload, Check, Coins, ShieldCheck, 
-  Wallet, Layers, Network, Info, Eye, Sparkles, Loader2, Play, CircleDot, RefreshCw, AlertCircle
+  Wallet, Layers, Network, Info, Eye, Sparkles, Loader2, Play, CircleDot, RefreshCw, AlertCircle,
+  Cpu, Terminal, FileCode, ShieldAlert, Key
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { TokenFormState, TokenType, DeployedToken } from '../types';
+import { B20DeploymentService } from '../services/b20DeploymentService';
 
 interface TokenDeployFormProps {
   walletAddress: string | null;
@@ -37,8 +39,8 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
     allowlist: false,
     blocklist: false,
     memoSupport: false,
-    treasuryWallet: walletAddress || '0x5b38...a21f',
-    ownerWallet: walletAddress || '0x5b38...a21f'
+    treasuryWallet: walletAddress || '0x5B38Da6a701c568545dCfcB03FcB875f56beddC4',
+    ownerWallet: walletAddress || '0x5B38Da6a701c568545dCfcB03FcB875f56beddC4'
   });
 
   const [dragActive, setDragActive] = useState(false);
@@ -46,16 +48,23 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
   const [deployStep, setDeployStep] = useState(0); // 0: Sign, 1: Broadcast, 2: Deploy, 3: Completed
   const [generatedAddress, setGeneratedAddress] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [previewTab, setPreviewTab] = useState<'visual' | 'technical'>('visual');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Real-time calculations from our B20 deployment service layer
+  const validationResult = B20DeploymentService.validateForm(form, walletAddress);
+  const preparedPayload = B20DeploymentService.prepareDeploymentPayload(form, walletAddress);
+  const preparedSummary = B20DeploymentService.generateDeploymentSummary(form, walletAddress);
+  const transactionPreview = B20DeploymentService.generateTransactionPreview(form, preparedPayload, walletAddress);
 
   // Synced address when wallet changes
   React.useEffect(() => {
     if (walletAddress) {
       setForm(prev => ({
         ...prev,
-        treasuryWallet: prev.treasuryWallet.startsWith('0x5b38') ? walletAddress : prev.treasuryWallet,
-        ownerWallet: prev.ownerWallet.startsWith('0x5b38') ? walletAddress : prev.ownerWallet,
+        treasuryWallet: prev.treasuryWallet === '0x5B38Da6a701c568545dCfcB03FcB875f56beddC4' || prev.treasuryWallet.startsWith('0x5b38') ? walletAddress : prev.treasuryWallet,
+        ownerWallet: prev.ownerWallet === '0x5B38Da6a701c568545dCfcB03FcB875f56beddC4' || prev.ownerWallet.startsWith('0x5b38') ? walletAddress : prev.ownerWallet,
       }));
     }
   }, [walletAddress]);
@@ -135,12 +144,7 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
         setDeployStep(2); // Deploying Contract
         setTimeout(() => {
           // Complete
-          const hex = '0123456789abcdef';
-          let randomAddr = '0x00b20';
-          for (let i = 0; i < 35; i++) {
-            randomAddr += hex[Math.floor(Math.random() * 16)];
-          }
-          setGeneratedAddress(randomAddr);
+          setGeneratedAddress(preparedPayload.predictedAddress);
           setDeployStep(3);
         }, 1500);
       }, 1500);
@@ -576,8 +580,8 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
       {/* RIGHT COLUMN: PREVIEW & DEPLOY ACTIONS */}
       <div className="lg:col-span-5 space-y-6 sticky top-24">
         
-        {/* Real-time Token Preview Card */}
-        <div className="rounded-2xl border border-slate-800 bg-slate-950 p-6 shadow-xl relative overflow-hidden group">
+        {/* Real-time Token Preview Card with Tabs */}
+        <div className="rounded-2xl border border-slate-800 bg-slate-950 p-6 shadow-xl relative overflow-hidden group space-y-5">
           {/* Background color gradient glow based on Token type */}
           <div className={`absolute top-0 right-0 -z-10 h-44 w-44 rounded-full blur-[90px] transition-all duration-500 ${
             form.tokenType === 'Standard' 
@@ -588,89 +592,315 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
           }`} />
 
           <div className="flex items-center justify-between border-b border-slate-900 pb-3">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center space-x-1.5">
-              <Eye className="h-3.5 w-3.5 text-blue-500" />
-              <span>B20 Live Contract Preview</span>
-            </span>
+            <div className="flex space-x-1 p-1 bg-slate-900/90 rounded-xl border border-slate-800/80">
+              <button
+                type="button"
+                onClick={() => setPreviewTab('visual')}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 ${
+                  previewTab === 'visual' 
+                    ? 'bg-blue-600 text-white shadow-md' 
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                }`}
+              >
+                <Eye className="h-3.5 w-3.5" />
+                <span>Visual Card</span>
+              </button>
+              <button
+                type="button"
+                id="tech-preview-tab-btn"
+                onClick={() => setPreviewTab('technical')}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 ${
+                  previewTab === 'technical' 
+                    ? 'bg-blue-600 text-white shadow-md' 
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                }`}
+              >
+                <Cpu className="h-3.5 w-3.5" />
+                <span>Gas & Tx Preview</span>
+              </button>
+            </div>
             <span className="inline-flex items-center rounded-full bg-blue-950/50 px-2 py-0.5 text-[9px] font-bold text-blue-400 border border-blue-800/20">
-              BASE
+              BASE B20
             </span>
           </div>
 
-          {/* Actual Token Mock card render */}
-          <div className="mt-6 rounded-xl border border-slate-800/80 bg-gradient-to-br from-slate-900 to-slate-950 p-5 shadow-2xl relative overflow-hidden">
-            
-            {/* Visual shine */}
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+          <AnimatePresence mode="wait">
+            {previewTab === 'visual' ? (
+              <motion.div
+                key="visual-preview"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+                className="space-y-4"
+              >
+                {/* Actual Token Mock card render */}
+                <div className="rounded-xl border border-slate-800/80 bg-gradient-to-br from-slate-900 to-slate-950 p-5 shadow-2xl relative overflow-hidden">
+                  
+                  {/* Visual shine */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
 
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3.5">
-                {form.logoUrl.startsWith('data:image/') ? (
-                  <img 
-                    src={form.logoUrl} 
-                    alt="Token Logo" 
-                    className="h-11 w-11 rounded-xl object-cover shadow-md border border-slate-800" 
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <div className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ${
-                    form.tokenType === 'Standard' 
-                      ? 'from-blue-600 to-indigo-600' 
-                      : form.tokenType === 'Stablecoin' 
-                      ? 'from-emerald-500 to-teal-700' 
-                      : 'from-purple-600 to-pink-600'
-                  } text-xl shadow-lg border border-slate-700`}>
-                    {form.logoUrl || '🔮'}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3.5">
+                      {form.logoUrl.startsWith('data:image/') ? (
+                        <img 
+                          src={form.logoUrl} 
+                          alt="Token Logo" 
+                          className="h-11 w-11 rounded-xl object-cover shadow-md border border-slate-800" 
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ${
+                          form.tokenType === 'Standard' 
+                            ? 'from-blue-600 to-indigo-600' 
+                            : form.tokenType === 'Stablecoin' 
+                            ? 'from-emerald-500 to-teal-700' 
+                            : 'from-purple-600 to-pink-600'
+                        } text-xl shadow-lg border border-slate-700`}>
+                          {form.logoUrl || '🔮'}
+                        </div>
+                      )}
+                      <div>
+                        <h4 className="font-display font-extrabold text-white text-base truncate max-w-[140px] sm:max-w-[180px]">{form.name || 'Unnamed Token'}</h4>
+                        <p className="font-mono text-[10px] text-slate-500 uppercase tracking-widest">{form.tokenType} B20 CLASS</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-mono text-xs font-bold text-white bg-slate-900 border border-slate-800/60 px-2 py-1 rounded-md">
+                        {form.symbol ? `$${form.symbol.toUpperCase()}` : '$TKN'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Description inside token */}
+                  <p className="mt-4 text-xs text-slate-400 line-clamp-2 leading-relaxed min-h-[32px]">
+                    {form.description || 'No description provided. Define your project mission in the configurator.'}
+                  </p>
+
+                  <div className="mt-4 grid grid-cols-2 gap-4 border-t border-slate-900/60 pt-4">
+                    <div>
+                      <span className="text-[10px] uppercase tracking-wider text-slate-500 block">Total Supply</span>
+                      <span className="font-mono text-sm font-bold text-white">
+                        {form.totalSupply ? parseFloat(form.totalSupply).toLocaleString() : '0'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase tracking-wider text-slate-500 block">Decimals</span>
+                      <span className="font-mono text-sm font-bold text-slate-300">
+                        {form.decimals}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Advanced features indicators */}
+                  <div className="mt-4 pt-3 border-t border-slate-900/60">
+                    <span className="text-[9px] uppercase tracking-wider text-slate-500 block mb-2">Enabled Extensions</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {form.mintable && <span className="rounded-full bg-blue-950/50 border border-blue-900/40 text-blue-400 text-[9px] font-bold px-2 py-0.5">MINTABLE</span>}
+                      {form.burnable && <span className="rounded-full bg-indigo-950/50 border border-indigo-900/40 text-indigo-400 text-[9px] font-bold px-2 py-0.5">BURNABLE</span>}
+                      {form.pausable && <span className="rounded-full bg-amber-950/50 border border-amber-900/40 text-amber-400 text-[9px] font-bold px-2 py-0.5">PAUSABLE</span>}
+                      {form.allowlist && <span className="rounded-full bg-pink-950/50 border border-pink-900/40 text-pink-400 text-[9px] font-bold px-2 py-0.5">ALLOWLIST</span>}
+                      {form.blocklist && <span className="rounded-full bg-rose-950/50 border border-rose-900/40 text-rose-400 text-[9px] font-bold px-2 py-0.5">BLOCKLIST</span>}
+                      {form.memoSupport && <span className="rounded-full bg-teal-950/50 border border-teal-900/40 text-teal-400 text-[9px] font-bold px-2 py-0.5">MEMO</span>}
+                      {!form.mintable && !form.burnable && !form.pausable && !form.allowlist && !form.blocklist && !form.memoSupport && (
+                        <span className="text-xs text-slate-500 italic">None. Pure Standard ERC-20.</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="technical-preview"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+                className="space-y-4 max-h-[580px] overflow-y-auto pr-1 text-slate-300"
+              >
+                {/* 1. COMPILER ENVIRONMENT DETAILS */}
+                <div className="rounded-xl border border-slate-900 bg-slate-950/90 p-4 space-y-3">
+                  <div className="flex items-center space-x-2 text-xs font-bold text-slate-400">
+                    <FileCode className="h-4 w-4 text-indigo-400" />
+                    <span>EVM COMPILER CONFIGURATION</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
+                    <div className="bg-slate-900/60 p-2 rounded border border-slate-900">
+                      <span className="text-slate-500 block">Solidity Version</span>
+                      <span className="text-white font-bold">{preparedPayload.compilerVersion}</span>
+                    </div>
+                    <div className="bg-slate-900/60 p-2 rounded border border-slate-900">
+                      <span className="text-slate-500 block">Optimization Runs</span>
+                      <span className="text-white font-bold">{preparedPayload.optimizationRuns} Runs</span>
+                    </div>
+                    <div className="bg-slate-900/60 p-2 rounded border border-slate-900">
+                      <span className="text-slate-500 block">EVM Target Chain</span>
+                      <span className="text-white font-bold">{preparedPayload.evmTarget}</span>
+                    </div>
+                    <div className="bg-slate-900/60 p-2 rounded border border-slate-900">
+                      <span className="text-slate-500 block">Target Template</span>
+                      <span className="text-white font-bold">{preparedPayload.contractName}.sol</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. CREATE2 DETERMINISTIC ADDRESS PREDICTION */}
+                <div className="rounded-xl border border-slate-900 bg-slate-950/90 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2 text-xs font-bold text-slate-400">
+                      <Key className="h-4 w-4 text-emerald-400" />
+                      <span>CREATE2 DETERMINISTIC PREDICTION</span>
+                    </div>
+                    <span className="text-[9px] font-mono bg-emerald-950/50 border border-emerald-900/30 text-emerald-400 px-1.5 py-0.5 rounded uppercase">Gas-saving salt</span>
+                  </div>
+                  <div className="space-y-2 font-mono text-[11px]">
+                    <div className="bg-slate-900/60 p-2 rounded border border-slate-900">
+                      <span className="text-slate-500 block">CREATE2 salt (32 bytes hex)</span>
+                      <span className="text-slate-300 text-[10px] break-all select-all">{preparedPayload.create2Salt}</span>
+                    </div>
+                    <div className="bg-emerald-950/20 p-2.5 rounded border border-emerald-900/30">
+                      <span className="text-emerald-500 block text-[10px] font-bold">Predicted Deploy Contract Address</span>
+                      <span className="text-emerald-400 text-xs font-bold break-all select-all">{preparedPayload.predictedAddress}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. SAFETY CHECKS & VALIDATION */}
+                <div className="rounded-xl border border-slate-900 bg-slate-950/90 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2 text-xs font-bold text-slate-400">
+                      <ShieldCheck className="h-4 w-4 text-blue-400" />
+                      <span>POLICIES & SAFETY AUDIT</span>
+                    </div>
+                    <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold ${
+                      preparedSummary.securityCheckStatus.passed 
+                        ? 'bg-emerald-950/50 text-emerald-400 border border-emerald-900/30' 
+                        : 'bg-rose-950/50 text-rose-400 border border-rose-900/30'
+                    }`}>
+                      {preparedSummary.securityCheckStatus.passed ? 'PASSED' : 'ERROR'}
+                    </span>
+                  </div>
+
+                  {preparedSummary.securityCheckStatus.passed ? (
+                    <div className="flex items-center space-x-2 rounded-lg bg-emerald-950/20 border border-emerald-900/20 p-2.5 text-xs text-emerald-400">
+                      <Check className="h-4 w-4 shrink-0" />
+                      <span>All compiled parameters fully conform to B20 ERC-20 secure specifications.</span>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {preparedSummary.securityCheckStatus.criticalIssues.map((err: string, i: number) => (
+                        <div key={i} className="flex items-start space-x-2 rounded-lg bg-rose-950/20 border border-rose-900/20 p-2 text-[11px] text-rose-400">
+                          <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                          <span>{err}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {preparedSummary.securityCheckStatus.warnings.length > 0 && (
+                    <div className="space-y-1.5">
+                      <span className="text-[9px] uppercase font-bold text-slate-500">Warnings ({preparedSummary.securityCheckStatus.warnings.length}):</span>
+                      {preparedSummary.securityCheckStatus.warnings.map((warn: string, idx: number) => (
+                        <div key={idx} className="flex items-start space-x-2 rounded-lg bg-yellow-950/15 border border-yellow-900/20 p-2 text-[10px] text-yellow-500 leading-normal">
+                          <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                          <span>{warn}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* 4. EXTENSION COMPLIANCE DETAIL */}
+                {preparedSummary.activeFeatures.length > 0 && (
+                  <div className="rounded-xl border border-slate-900 bg-slate-950/90 p-4 space-y-2.5">
+                    <span className="text-[10px] font-mono font-bold text-slate-400 block uppercase">Active B20 Extensions</span>
+                    <div className="grid grid-cols-1 gap-2">
+                      {preparedSummary.activeFeatures.map((feat: any, idx: number) => (
+                        <div key={idx} className="p-2 rounded border border-slate-900 bg-slate-900/40 text-[11px] flex items-start justify-between">
+                          <div>
+                            <span className="font-bold text-white block">{feat.name}</span>
+                            <span className="text-slate-500 text-[10px]">{feat.description}</span>
+                          </div>
+                          <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded font-bold uppercase ${
+                            feat.category === 'emission' 
+                              ? 'bg-blue-950/40 text-blue-400 border border-blue-900/30' 
+                              : feat.category === 'security'
+                              ? 'bg-amber-950/40 text-amber-400 border border-amber-900/30'
+                              : 'bg-teal-950/40 text-teal-400 border border-teal-900/30'
+                          }`}>
+                            {feat.category}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
-                <div>
-                  <h4 className="font-display font-extrabold text-white text-base truncate max-w-[140px] sm:max-w-[180px]">{form.name || 'Unnamed Token'}</h4>
-                  <p className="font-mono text-[10px] text-slate-500 uppercase tracking-widest">{form.tokenType} B20 CLASS</p>
+
+                {/* 5. TRANSACTION PREVIEW CALLDATA */}
+                <div className="rounded-xl border border-slate-900 bg-slate-950/90 p-4 space-y-3">
+                  <div className="flex items-center space-x-2 text-xs font-bold text-slate-400">
+                    <Terminal className="h-4 w-4 text-blue-400" />
+                    <span>BROADCAST TRANSACTION PREVIEW</span>
+                  </div>
+                  <div className="space-y-2 text-[11px] font-mono">
+                    <div className="bg-slate-900/60 p-2 rounded border border-slate-900">
+                      <span className="text-slate-500 block">Router Contract Target Address</span>
+                      <span className="text-blue-400 font-bold break-all select-all">{transactionPreview.toAddress}</span>
+                    </div>
+                    <div className="bg-slate-900/60 p-2 rounded border border-slate-900">
+                      <span className="text-slate-500 block">Method Signature</span>
+                      <span className="text-white font-bold select-all">{transactionPreview.functionSignature}</span>
+                    </div>
+
+                    <div className="bg-slate-900/60 p-2 rounded border border-slate-900 space-y-1.5">
+                      <span className="text-slate-500 block">EVM Parameter Decoded Slots</span>
+                      <div className="space-y-1 text-[10px] max-h-[140px] overflow-y-auto">
+                        <div className="flex justify-between border-b border-slate-950 py-1">
+                          <span className="text-slate-500">_name</span>
+                          <span className="text-white font-bold truncate max-w-[200px]">{transactionPreview.functionArguments[0]}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-slate-950 py-1">
+                          <span className="text-slate-500">_symbol</span>
+                          <span className="text-white font-bold">{transactionPreview.functionArguments[1]}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-slate-950 py-1">
+                          <span className="text-slate-500">_decimals</span>
+                          <span className="text-slate-300 font-bold">{transactionPreview.functionArguments[2]}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-slate-950 py-1">
+                          <span className="text-slate-500">_initialSupply</span>
+                          <span className="text-slate-300 font-bold truncate max-w-[150px]">{transactionPreview.functionArguments[3]}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-slate-950 py-1">
+                          <span className="text-slate-500">_maxSupply</span>
+                          <span className="text-slate-300 font-bold truncate max-w-[150px]">{transactionPreview.functionArguments[4]}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-slate-950 py-1">
+                          <span className="text-slate-500">_treasury</span>
+                          <span className="text-slate-400 select-all font-bold">{transactionPreview.functionArguments[5].slice(0, 10)}...{transactionPreview.functionArguments[5].slice(-6)}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-slate-950 py-1">
+                          <span className="text-slate-500">_owner</span>
+                          <span className="text-slate-400 select-all font-bold">{transactionPreview.functionArguments[6].slice(0, 10)}...{transactionPreview.functionArguments[6].slice(-6)}</span>
+                        </div>
+                        <div className="flex justify-between py-1">
+                          <span className="text-slate-500">_featureFlags</span>
+                          <span className="text-blue-400 font-bold">{transactionPreview.functionArguments[7]}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-900/60 p-2 rounded border border-slate-900">
+                      <span className="text-slate-500 block mb-1">EVM Transaction Calldata (Raw Hex Payload)</span>
+                      <div className="bg-slate-950/80 p-2 rounded border border-slate-950 font-mono text-[9px] text-slate-400 break-all select-all leading-normal max-h-[100px] overflow-y-auto">
+                        {transactionPreview.rawCallDataHex}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div className="text-right">
-                <span className="font-mono text-xs font-bold text-white bg-slate-900 border border-slate-800/60 px-2 py-1 rounded-md">
-                  {form.symbol ? `$${form.symbol.toUpperCase()}` : '$TKN'}
-                </span>
-              </div>
-            </div>
-
-            {/* Description inside token */}
-            <p className="mt-4 text-xs text-slate-400 line-clamp-2 leading-relaxed min-h-[32px]">
-              {form.description || 'No description provided. Define your project mission in the configurator.'}
-            </p>
-
-            <div className="mt-4 grid grid-cols-2 gap-4 border-t border-slate-900/60 pt-4">
-              <div>
-                <span className="text-[10px] uppercase tracking-wider text-slate-500 block">Total Supply</span>
-                <span className="font-mono text-sm font-bold text-white">
-                  {form.totalSupply ? parseFloat(form.totalSupply).toLocaleString() : '0'}
-                </span>
-              </div>
-              <div>
-                <span className="text-[10px] uppercase tracking-wider text-slate-500 block">Decimals</span>
-                <span className="font-mono text-sm font-bold text-slate-300">
-                  {form.decimals}
-                </span>
-              </div>
-            </div>
-
-            {/* Advanced features indicators */}
-            <div className="mt-4 pt-3 border-t border-slate-900/60">
-              <span className="text-[9px] uppercase tracking-wider text-slate-500 block mb-2">Enabled Extensions</span>
-              <div className="flex flex-wrap gap-1.5">
-                {form.mintable && <span className="rounded-full bg-blue-950/50 border border-blue-900/40 text-blue-400 text-[9px] font-bold px-2 py-0.5">MINTABLE</span>}
-                {form.burnable && <span className="rounded-full bg-indigo-950/50 border border-indigo-900/40 text-indigo-400 text-[9px] font-bold px-2 py-0.5">BURNABLE</span>}
-                {form.pausable && <span className="rounded-full bg-amber-950/50 border border-amber-900/40 text-amber-400 text-[9px] font-bold px-2 py-0.5">PAUSABLE</span>}
-                {form.allowlist && <span className="rounded-full bg-pink-950/50 border border-pink-900/40 text-pink-400 text-[9px] font-bold px-2 py-0.5">ALLOWLIST</span>}
-                {form.blocklist && <span className="rounded-full bg-rose-950/50 border border-rose-900/40 text-rose-400 text-[9px] font-bold px-2 py-0.5">BLOCKLIST</span>}
-                {form.memoSupport && <span className="rounded-full bg-teal-950/50 border border-teal-900/40 text-teal-400 text-[9px] font-bold px-2 py-0.5">MEMO</span>}
-                {!form.mintable && !form.burnable && !form.pausable && !form.allowlist && !form.blocklist && !form.memoSupport && (
-                  <span className="text-xs text-slate-500 italic">None. Pure Standard ERC-20.</span>
-                )}
-              </div>
-            </div>
-          </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Deploy & Payment Section */}
@@ -686,7 +916,7 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
                 <span>Base Sequencer Cost</span>
                 <HelpCircle className="h-3 w-3 text-slate-600 hover:text-slate-400 cursor-help" />
               </span>
-              <span className="font-mono text-white">{networkFee} ETH</span>
+              <span className="font-mono text-white">{preparedSummary.costEstimation.l1GasFeeEth} ETH</span>
             </div>
             
             <div className="flex justify-between items-center text-slate-400">
@@ -694,7 +924,7 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
                 <span>B20 Factory Creation Fee</span>
                 <HelpCircle className="h-3 w-3 text-slate-600 hover:text-slate-400 cursor-help" />
               </span>
-              <span className="font-mono text-white">{serviceFee} ETH</span>
+              <span className="font-mono text-white">{preparedSummary.costEstimation.factoryServiceFeeEth} ETH</span>
             </div>
 
             <div className="flex justify-between items-center text-slate-400">
@@ -710,10 +940,10 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
             <div className="flex justify-between items-end pt-1">
               <div>
                 <span className="text-xs text-slate-500 block">Total Est. Deployment Cost</span>
-                <span className="text-xs text-slate-400 font-semibold font-mono">~ {totalUsd} USD</span>
+                <span className="text-xs text-slate-400 font-semibold font-mono">~ {preparedSummary.costEstimation.totalUsd} USD</span>
               </div>
               <div className="text-right">
-                <span className="font-mono text-xl font-extrabold text-blue-400">{totalEth} ETH</span>
+                <span className="font-mono text-xl font-extrabold text-blue-400">{preparedSummary.costEstimation.totalEth} ETH</span>
               </div>
             </div>
           </div>
@@ -721,9 +951,9 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
           <button
             id="deploy-token-action-btn"
             onClick={triggerDeploy}
-            disabled={!walletAddress}
+            disabled={!walletAddress || !validationResult.isValid}
             className={`w-full mt-4 flex items-center justify-center space-x-2.5 rounded-xl py-4 font-bold text-white transition-all ${
-              walletAddress 
+              (walletAddress && validationResult.isValid)
                 ? 'bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-950/40 active:scale-95 cursor-pointer' 
                 : 'bg-slate-900 border border-slate-800 text-slate-500 cursor-not-allowed opacity-60'
             }`}
@@ -736,6 +966,21 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
             <div className="flex items-center space-x-2.5 rounded-xl border border-yellow-500/20 bg-yellow-950/10 p-3.5 text-xs text-yellow-500">
               <AlertCircle className="h-4 w-4 shrink-0" />
               <span>Wallet not connected. Please connect your Web3 wallet using the "Connect Wallet" button in the top right.</span>
+            </div>
+          )}
+
+          {walletAddress && !validationResult.isValid && (
+            <div className="flex items-start space-x-2.5 rounded-xl border border-rose-500/20 bg-rose-950/10 p-3.5 text-xs text-rose-500">
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <span className="font-bold">Invalid parameters detected:</span>
+                <ul className="list-disc list-inside space-y-0.5 pl-1">
+                  {validationResult.errors.slice(0, 2).map((err: string, i: number) => (
+                    <li key={i}>{err}</li>
+                  ))}
+                  {validationResult.errors.length > 2 && <li>and {validationResult.errors.length - 2} more errors.</li>}
+                </ul>
+              </div>
             </div>
           )}
 
