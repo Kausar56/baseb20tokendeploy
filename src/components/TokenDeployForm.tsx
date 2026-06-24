@@ -1,10 +1,11 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   HelpCircle, Upload, Check, Coins, ShieldCheck, 
   Wallet, Layers, Network, Info, Eye, Sparkles, Loader2, Play, CircleDot, RefreshCw, AlertCircle,
-  Cpu, Terminal, FileCode, ShieldAlert, Key
+  Cpu, Terminal, FileCode, ShieldAlert, Key, XCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { TokenFormState, TokenType, DeployedToken } from '../types';
 import { B20DeploymentService } from '../services/b20DeploymentService';
 
@@ -50,6 +51,23 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
   const [error, setError] = useState<string | null>(null);
   const [previewTab, setPreviewTab] = useState<'visual' | 'technical'>('visual');
 
+  // Actual Web3 Transaction & Deployment State Management
+  const [deployStatus, setDeployStatus] = useState<'idle' | 'signing' | 'broadcasting' | 'mining' | 'success' | 'failed'>('idle');
+  const [txErrorMsg, setTxErrorMsg] = useState<string | null>(null);
+  const [txHashState, setTxHashState] = useState<string>('');
+
+  const { writeContractAsync } = useWriteContract();
+
+  const { 
+    data: txReceipt, 
+    isLoading: isTxConfirming, 
+    isSuccess: isTxConfirmed, 
+    isError: isTxFailed,
+    error: txConfirmError 
+  } = useWaitForTransactionReceipt({
+    hash: txHashState as `0x${string}` || undefined,
+  });
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Real-time calculations from our B20 deployment service layer
@@ -68,6 +86,44 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
       }));
     }
   }, [walletAddress]);
+
+  // Reactive listeners for blockchain transaction progress
+  useEffect(() => {
+    if (deployStatus === 'broadcasting' && txHashState) {
+      setDeployStatus('mining');
+      setDeployStep(2);
+    }
+  }, [txHashState, deployStatus]);
+
+  useEffect(() => {
+    if (isTxConfirming) {
+      setDeployStatus('mining');
+      setDeployStep(2);
+    }
+  }, [isTxConfirming]);
+
+  useEffect(() => {
+    if (isTxConfirmed && txReceipt) {
+      let finalAddress = preparedPayload.predictedAddress;
+      if (txReceipt.logs && txReceipt.logs.length > 0) {
+        for (const log of txReceipt.logs) {
+          if (log.topics && log.topics.length > 1) {
+            const topicAddr = log.topics[1];
+            if (topicAddr && topicAddr.length === 66) {
+              finalAddress = '0x' + topicAddr.slice(26);
+              break;
+            }
+          }
+        }
+      }
+      setGeneratedAddress(finalAddress);
+      setDeployStatus('success');
+      setDeployStep(3);
+    } else if (isTxFailed || txConfirmError) {
+      setDeployStatus('failed');
+      setTxErrorMsg(txConfirmError?.message || 'Transaction execution failed or reverted on Base.');
+    }
+  }, [isTxConfirmed, isTxFailed, txReceipt, txConfirmError, preparedPayload.predictedAddress]);
 
   const handleTextChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -122,7 +178,7 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
     setForm(prev => ({ ...prev, logoUrl: logo }));
   };
 
-  const triggerDeploy = () => {
+  const triggerDeploy = async () => {
     if (!walletAddress) {
       onConnectWallet();
       return;
@@ -133,31 +189,88 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
       return;
     }
 
+    const { isValid, errors } = B20DeploymentService.validateForm(form, walletAddress);
+    if (!isValid) {
+      setError(errors.join(' '));
+      return;
+    }
+
     setError(null);
+    setTxErrorMsg(null);
     setIsDeploying(true);
+    setDeployStatus('signing');
     setDeployStep(0);
 
-    // Simulate standard web3 launchpad steps
-    setTimeout(() => {
-      setDeployStep(1); // Broadcasting
-      setTimeout(() => {
-        setDeployStep(2); // Deploying Contract
-        setTimeout(() => {
-          // Complete
-          setGeneratedAddress(preparedPayload.predictedAddress);
-          setDeployStep(3);
-        }, 1500);
-      }, 1500);
-    }, 1200);
+    try {
+      const decimalsNum = Number(form.decimals) || 18;
+      const initialSupplyBigInt = BigInt(form.totalSupply || '0') * (10n ** BigInt(decimalsNum));
+      const maxSupplyBigInt = BigInt(form.maxSupply || '0') * (10n ** BigInt(decimalsNum));
+      const featureFlagsByte = B20DeploymentService.computeFeatureFlagsByte(form);
+      const serviceFeeValue = form.tokenType === 'Standard' ? 0.0005 : form.tokenType === 'Stablecoin' ? 0.0009 : 0.0012;
+      const valueWei = BigInt(Math.floor(serviceFeeValue * 1e18));
+
+      // Invoke the real Base B20 deployment contract method
+      const hash = await writeContractAsync({
+        address: B20DeploymentService.FACTORY_ADDRESS,
+        abi: [
+          {
+            name: 'deployB20Token',
+            type: 'function',
+            stateMutability: 'payable',
+            inputs: [
+              { name: 'name', type: 'string' },
+              { name: 'symbol', type: 'string' },
+              { name: 'decimals', type: 'uint8' },
+              { name: 'initialSupply', type: 'uint256' },
+              { name: 'maxSupply', type: 'uint256' },
+              { name: 'treasury', type: 'address' },
+              { name: 'owner', type: 'address' },
+              { name: 'featureFlags', type: 'uint8' }
+            ],
+            outputs: [
+              { name: 'tokenAddress', type: 'address' }
+            ]
+          }
+        ] as const,
+        functionName: 'deployB20Token',
+        args: [
+          form.name,
+          form.symbol.toUpperCase(),
+          decimalsNum,
+          initialSupplyBigInt,
+          maxSupplyBigInt,
+          form.treasuryWallet as `0x${string}`,
+          form.ownerWallet as `0x${string}`,
+          featureFlagsByte
+        ],
+        value: valueWei,
+      } as any);
+
+      // Signature complete
+      setTxHashState(hash);
+      setDeployStatus('broadcasting');
+      setDeployStep(1);
+
+    } catch (err: any) {
+      console.error('B20 Deployment Error:', err);
+      setDeployStatus('failed');
+      setTxErrorMsg(err?.message || 'Transaction rejected or failed during signing.');
+    }
   };
 
   const finalizeDeployment = () => {
     setIsDeploying(false);
+    
+    // Reset transaction states
+    setDeployStatus('idle');
+    const prevTxHash = txHashState;
+    setTxHashState('');
+    
     const newDeployedToken: DeployedToken = {
       ...form,
-      id: Math.random().toString(36).substr(2, 9),
+      id: generatedAddress || Math.random().toString(36).substr(2, 9),
       deployedAt: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      txHash: '0x' + Array.from({length: 64}, () => Math.floor(Math.random()*16).toString(16)).join(''),
+      txHash: prevTxHash || '0x' + Array.from({length: 64}, () => Math.floor(Math.random()*16).toString(16)).join(''),
       status: 'active'
     };
     onDeploySuccess(newDeployedToken);
@@ -1023,8 +1136,10 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
                 
                 {/* Step 1: Request Wallet Signature */}
                 <div className={`flex items-start space-x-3.5 p-3 rounded-xl border transition-all ${
-                  deployStep === 0 
+                  deployStatus === 'signing'
                     ? 'border-blue-500/40 bg-blue-950/10' 
+                    : deployStatus === 'failed' && deployStep === 0
+                    ? 'border-red-500/40 bg-red-950/10'
                     : deployStep > 0 
                     ? 'border-emerald-500/20 bg-emerald-950/5' 
                     : 'border-slate-900 bg-transparent'
@@ -1032,19 +1147,27 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
                   <div className="flex shrink-0 h-6 w-6 items-center justify-center rounded-full text-xs font-bold font-mono">
                     {deployStep > 0 ? (
                       <Check className="h-4 w-4 text-emerald-400" />
-                    ) : (
+                    ) : deployStatus === 'failed' && deployStep === 0 ? (
+                      <XCircle className="h-4 w-4 text-red-500" />
+                    ) : deployStatus === 'signing' ? (
                       <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
+                    ) : (
+                      <CircleDot className="h-4 w-4 text-slate-700" />
                     )}
                   </div>
                   <div>
                     <h4 className={`text-xs font-bold ${deployStep >= 0 ? 'text-white' : 'text-slate-600'}`}>1. Signature Request</h4>
-                    <p className="text-[10px] text-slate-500 mt-0.5">Please approve the B20 deployment payload in your connected Coinbase/MetaMask extension.</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">
+                      {deployStatus === 'failed' && deployStep === 0 
+                        ? 'Signature rejected or failed. Please check your wallet and try again.'
+                        : 'Please approve the B20 deployment payload in your connected Coinbase/MetaMask extension.'}
+                    </p>
                   </div>
                 </div>
 
                 {/* Step 2: Sequencer Broadcast */}
                 <div className={`flex items-start space-x-3.5 p-3 rounded-xl border transition-all ${
-                  deployStep === 1 
+                  deployStatus === 'broadcasting' 
                     ? 'border-blue-500/40 bg-blue-950/10' 
                     : deployStep > 1 
                     ? 'border-emerald-500/20 bg-emerald-950/5' 
@@ -1053,7 +1176,7 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
                   <div className="flex shrink-0 h-6 w-6 items-center justify-center rounded-full text-xs font-bold font-mono">
                     {deployStep > 1 ? (
                       <Check className="h-4 w-4 text-emerald-400" />
-                    ) : deployStep === 1 ? (
+                    ) : deployStatus === 'broadcasting' ? (
                       <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
                     ) : (
                       <CircleDot className="h-4 w-4 text-slate-700" />
@@ -1067,8 +1190,10 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
 
                 {/* Step 3: Mining contract */}
                 <div className={`flex items-start space-x-3.5 p-3 rounded-xl border transition-all ${
-                  deployStep === 2 
+                  deployStatus === 'mining' 
                     ? 'border-blue-500/40 bg-blue-950/10' 
+                    : deployStatus === 'failed' && deployStep === 2
+                    ? 'border-red-500/40 bg-red-950/10'
                     : deployStep > 2 
                     ? 'border-emerald-500/20 bg-emerald-950/5' 
                     : 'border-slate-900 bg-transparent opacity-60'
@@ -1076,7 +1201,9 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
                   <div className="flex shrink-0 h-6 w-6 items-center justify-center rounded-full text-xs font-bold font-mono">
                     {deployStep > 2 ? (
                       <Check className="h-4 w-4 text-emerald-400" />
-                    ) : deployStep === 2 ? (
+                    ) : deployStatus === 'failed' && deployStep === 2 ? (
+                      <XCircle className="h-4 w-4 text-red-500" />
+                    ) : deployStatus === 'mining' ? (
                       <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
                     ) : (
                       <CircleDot className="h-4 w-4 text-slate-700" />
@@ -1084,33 +1211,78 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
                   </div>
                   <div>
                     <h4 className={`text-xs font-bold ${deployStep >= 2 ? 'text-white' : 'text-slate-600'}`}>3. Instantiate B20 Smart Contract</h4>
-                    <p className="text-[10px] text-slate-500 mt-0.5">Base gas miners processing contract bytecode. Mapping owner and treasury wallets.</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">
+                      {deployStatus === 'failed' && deployStep === 2 
+                        ? 'Transaction execution failed or reverted on chain.'
+                        : 'Base gas miners processing contract bytecode. Mapping owner and treasury wallets.'}
+                    </p>
                   </div>
                 </div>
 
                 {/* Step 4: Success */}
                 <div className={`flex items-start space-x-3.5 p-3 rounded-xl border transition-all ${
-                  deployStep === 3 
+                  deployStatus === 'success' 
                     ? 'border-emerald-500/40 bg-emerald-950/10' 
                     : 'border-slate-900 bg-transparent opacity-40'
                 }`}>
                   <div className="flex shrink-0 h-6 w-6 items-center justify-center rounded-full text-xs font-bold font-mono">
-                    {deployStep === 3 ? (
+                    {deployStatus === 'success' ? (
                       <Sparkles className="h-4.5 w-4.5 text-yellow-400 animate-pulse" />
                     ) : (
                       <CircleDot className="h-4 w-4 text-slate-700" />
                     )}
                   </div>
                   <div>
-                    <h4 className={`text-xs font-bold ${deployStep === 3 ? 'text-white' : 'text-slate-600'}`}>4. Successfully Deployed 🎉</h4>
+                    <h4 className={`text-xs font-bold ${deployStatus === 'success' ? 'text-white' : 'text-slate-600'}`}>4. Successfully Deployed 🎉</h4>
                     <p className="text-[10px] text-slate-500 mt-0.5">B20 Token successfully verified and launched on Base Network.</p>
                   </div>
                 </div>
 
               </div>
 
+              {/* Error Message & Dismiss Button */}
+              {deployStatus === 'failed' && (
+                <div className="rounded-xl border border-red-500/20 bg-red-950/15 p-4 space-y-3">
+                  <div className="flex items-center space-x-2 text-red-400">
+                    <AlertCircle className="h-5 w-5 shrink-0" />
+                    <span className="text-xs font-bold">Error Details</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed font-mono break-all max-h-24 overflow-y-auto">
+                    {txErrorMsg || 'Unknown Web3 provider failure occurred.'}
+                  </p>
+                  <button
+                    onClick={() => {
+                      setIsDeploying(false);
+                      setDeployStatus('idle');
+                    }}
+                    className="w-full py-2.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs shadow transition-colors cursor-pointer"
+                  >
+                    Dismiss & Adjust Configuration
+                  </button>
+                </div>
+              )}
+
+              {/* Transaction Hash Link */}
+              {txHashState && (
+                <div className="rounded-xl bg-slate-900 p-3.5 border border-slate-800 flex items-center justify-between">
+                  <div className="space-y-0.5 text-left">
+                    <span className="text-[9px] font-mono uppercase text-slate-500 block">Transaction Hash</span>
+                    <span className="text-[10px] font-mono text-slate-400 select-all break-all">{txHashState.slice(0, 16)}...{txHashState.slice(-8)}</span>
+                  </div>
+                  <a
+                    href={`https://basescan.org/tx/${txHashState}`}
+                    target="_blank"
+                    referrerPolicy="no-referrer"
+                    className="text-[10px] font-bold text-blue-400 hover:text-blue-300 transition-colors flex items-center space-x-0.5"
+                  >
+                    <span>View on Basescan</span>
+                    <Eye className="h-3.5 w-3.5" />
+                  </a>
+                </div>
+              )}
+
               {/* Complete Call to Action */}
-              {deployStep === 3 && (
+              {deployStatus === 'success' && (
                 <motion.div 
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}

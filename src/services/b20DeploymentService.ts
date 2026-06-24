@@ -350,6 +350,14 @@ export class B20DeploymentService {
       return addr.toLowerCase().replace('0x', '').padStart(64, '0');
     };
 
+    const stringToHex = (str: string): string => {
+      let hex = '';
+      for (let i = 0; i < str.length; i++) {
+        hex += str.charCodeAt(i).toString(16).padStart(2, '0');
+      }
+      return hex;
+    };
+
     // Constructor parameters layout
     abiHex += padUint256(form.decimals); // Decimals slot
     abiHex += padUint256(payload.constructorArgs.initialSupply); // Initial supply slot
@@ -359,8 +367,8 @@ export class B20DeploymentService {
     abiHex += padUint256(B20DeploymentService.computeFeatureFlagsByte(form)); // Features flag slot
     
     // Strings are offset, lets represent that concisely
-    abiHex += '...[ABI String Offset Encoded Name: ' + Buffer.from(form.name).toString('hex').slice(0, 16) + ']...';
-    abiHex += '[ABI String Offset Encoded Symbol: ' + Buffer.from(form.symbol).toString('hex').slice(0, 8) + ']';
+    abiHex += '...[ABI String Offset Encoded Name: ' + stringToHex(form.name).slice(0, 16) + ']...';
+    abiHex += '[ABI String Offset Encoded Symbol: ' + stringToHex(form.symbol).slice(0, 8) + ']';
 
     return {
       toAddress: B20DeploymentService.FACTORY_ADDRESS,
