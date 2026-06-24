@@ -1,0 +1,6 @@
+{
+  "name": "Base B20 Launchpad",
+  "description": "Deploy custom Base native B20 tokens instantly with zero coding.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
