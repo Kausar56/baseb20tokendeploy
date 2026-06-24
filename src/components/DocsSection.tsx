@@ -133,17 +133,13 @@ export default function DocsSection() {
               <h3 className="font-display text-xl font-bold text-white">Token Type Categories</h3>
             </div>
             <div className="space-y-4">
-              <div className="border-l-2 border-blue-500 pl-4 space-y-1">
-                <h4 className="font-bold text-white text-sm">Standard Token</h4>
-                <p className="text-xs text-slate-400">Suitable for memecoins, community rewards, governance utility, and standard decentralized finance (DeFi) protocols. Maximum flexibility and broad decentralized integration.</p>
+              <div className="border-l-2 border-purple-500 pl-4 space-y-1">
+                <h4 className="font-bold text-white text-sm">Asset Token</h4>
+                <p className="text-xs text-slate-400">Specifically structured as a general purpose B20 asset token to represent real-world assets (RWA), utility positions, or community reward blocks with embedded metadata support.</p>
               </div>
               <div className="border-l-2 border-emerald-500 pl-4 space-y-1">
                 <h4 className="font-bold text-white text-sm">Stablecoin</h4>
-                <p className="text-xs text-slate-400">Built-in mechanics to support pegged values (1.00 USD/EUR) and compliance protocols. Best for transaction-based projects and ecosystem pegs.</p>
-              </div>
-              <div className="border-l-2 border-purple-500 pl-4 space-y-1">
-                <h4 className="font-bold text-white text-sm">Asset Token</h4>
-                <p className="text-xs text-slate-400">Specifically structured to represent real-world assets (RWA), fractionized items, or yield-generating positions with embedded metadata support.</p>
+                <p className="text-xs text-slate-400">Fixed currency unit token built with pegged values (e.g. 1.00 USD/EUR) and compliance protocols. Best for transaction-based projects and ecosystem pegs.</p>
               </div>
             </div>
           </section>

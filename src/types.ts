@@ -1,4 +1,4 @@
-export type TokenType = 'Standard' | 'Stablecoin' | 'Asset';
+export type TokenType = 'Stablecoin' | 'Asset';
 
 export interface TokenFormState {
   name: string;

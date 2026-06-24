@@ -273,7 +273,7 @@ export class B20DeploymentService {
    * Prepares the full structured token deployment summary
    */
   public static generateDeploymentSummary(form: TokenFormState, walletAddress: string | null): B20DeploymentSummary {
-    const serviceFee = form.tokenType === 'Standard' ? 0.0005 : form.tokenType === 'Stablecoin' ? 0.0009 : 0.0012;
+    const serviceFee = form.tokenType === 'Stablecoin' ? 0.0009 : 0.0012;
     const totalEth = (B20DeploymentService.L1_GAS_FEE + B20DeploymentService.L2_GAS_FEE + serviceFee);
     const totalUsd = totalEth * B20DeploymentService.ETH_TO_USD_RATE;
 
@@ -332,7 +332,7 @@ export class B20DeploymentService {
     payload: B20DeploymentPayload,
     walletAddress: string | null
   ): B20TransactionPreview {
-    const serviceFee = form.tokenType === 'Standard' ? 0.0005 : form.tokenType === 'Stablecoin' ? 0.0009 : 0.0012;
+    const serviceFee = form.tokenType === 'Stablecoin' ? 0.0009 : 0.0012;
     const valueWei = (BigInt(Math.floor(serviceFee * 1e18))).toString(); // factory fee sent as transaction msg.value
 
     // Build standard pseudo ABI encoded bytes matching B20 Factory structure
@@ -386,7 +386,7 @@ export class B20DeploymentService {
         payload.constructorArgs.featureFlagsByte
       ],
       rawCallDataHex: abiHex,
-      gasLimitEstimate: 210000 + (form.tokenType === 'Standard' ? 45000 : form.tokenType === 'Stablecoin' ? 62000 : 84000),
+      gasLimitEstimate: 210000 + (form.tokenType === 'Stablecoin' ? 62000 : 84000),
       maxFeePerGasGwei: 0.12, // Optimism L2 gas is extremely cheap
       maxPriorityFeePerGasGwei: 0.005,
       valueWei,

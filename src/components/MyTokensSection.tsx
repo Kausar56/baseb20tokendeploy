@@ -187,11 +187,9 @@ export default function MyTokensSection({
                       />
                     ) : (
                       <div className={`flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br ${
-                        token.tokenType === 'Standard' 
-                          ? 'from-blue-600 to-indigo-600' 
-                          : token.tokenType === 'Stablecoin' 
+                        token.tokenType === 'Stablecoin' 
                           ? 'from-emerald-500 to-teal-700' 
-                          : 'from-purple-600 to-pink-600'
+                          : 'from-blue-600 to-indigo-600'
                       } text-2xl shadow-md border border-slate-800`}>
                         {token.logoUrl || '🔮'}
                       </div>

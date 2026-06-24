@@ -59,7 +59,7 @@ export default function HeroSection({ onLaunchToken, onLearnMore }: HeroSectionP
       color: 'from-purple-600 via-fuchsia-500 to-pink-500',
       glow: 'shadow-purple-500/20',
       supply: '88,000,000',
-      type: 'Standard ERC-20',
+      type: 'Asset Token',
       price: '$0.125',
       change: '-2.4%',
       features: ['Burnable', 'Allowlist'],

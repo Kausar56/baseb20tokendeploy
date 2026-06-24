@@ -24,7 +24,7 @@ const SEED_TOKENS: DeployedToken[] = [
     decimals: 18,
     totalSupply: '1000000000',
     maxSupply: '10000000000',
-    tokenType: 'Standard',
+    tokenType: 'Asset',
     mintable: true,
     burnable: true,
     pausable: true,

@@ -33,7 +33,7 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
     decimals: 18,
     totalSupply: '1000000',
     maxSupply: '10000000',
-    tokenType: 'Standard',
+    tokenType: 'Asset',
     mintable: true,
     burnable: true,
     pausable: false,
@@ -210,7 +210,7 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
       const initialSupplyBigInt = BigInt(form.totalSupply || '0') * (10n ** BigInt(decimalsNum));
       const maxSupplyBigInt = BigInt(form.maxSupply || '0') * (10n ** BigInt(decimalsNum));
       const featureFlagsByte = B20DeploymentService.computeFeatureFlagsByte(form);
-      const serviceFeeValue = form.tokenType === 'Standard' ? 0.0005 : form.tokenType === 'Stablecoin' ? 0.0009 : 0.0012;
+      const serviceFeeValue = form.tokenType === 'Stablecoin' ? 0.0009 : 0.0012;
       const valueWei = BigInt(Math.floor(serviceFeeValue * 1e18));
 
       // Invoke the real Base B20 deployment contract method
@@ -282,7 +282,7 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
 
   // Fees calculation
   const networkFee = 0.00021; // ETH
-  const serviceFee = form.tokenType === 'Standard' ? 0.0005 : form.tokenType === 'Stablecoin' ? 0.0009 : 0.0012;
+  const serviceFee = form.tokenType === 'Stablecoin' ? 0.0009 : 0.0012;
   const totalEth = (networkFee + serviceFee).toFixed(5);
   const totalUsd = (parseFloat(totalEth) * 3500).toFixed(2); // Mock 3500/ETH rate
 
@@ -476,22 +476,22 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
               <span className="block text-xs font-semibold text-slate-400 mb-2">
                 Token Standard Class
               </span>
-              <div className="grid grid-cols-3 gap-3">
-                {(['Standard', 'Stablecoin', 'Asset'] as TokenType[]).map((t) => (
+              <div className="grid grid-cols-2 gap-3">
+                {(['Asset', 'Stablecoin'] as TokenType[]).map((t) => (
                   <button
                     key={t}
                     type="button"
                     onClick={() => handleTypeSelect(t)}
-                    className={`flex flex-col items-center justify-center p-3 rounded-xl border transition-all text-center ${
+                    className={`flex flex-col items-center justify-center p-3.5 rounded-xl border transition-all text-center ${
                       form.tokenType === t 
                         ? 'border-blue-500 bg-blue-950/20 shadow-lg shadow-blue-950/10' 
                         : 'border-slate-800 bg-slate-900/30 hover:bg-slate-900 hover:border-slate-800'
                     }`}
                   >
                     <Layers className={`h-5 w-5 mb-1.5 ${form.tokenType === t ? 'text-blue-400' : 'text-slate-500'}`} />
-                    <span className="text-xs font-bold text-white">{t}</span>
-                    <span className="text-[9px] text-slate-500 mt-1">
-                      {t === 'Standard' ? 'Base Utility' : t === 'Stablecoin' ? 'Pegged Unit' : 'Asset-Backed'}
+                    <span className="text-xs font-bold text-white">{t === 'Asset' ? 'Asset Token' : 'Stablecoin'}</span>
+                    <span className="text-[9px] text-slate-500 mt-1 max-w-[140px] leading-tight">
+                      {t === 'Asset' ? 'General purpose B20 asset token' : 'Fixed currency unit token'}
                     </span>
                   </button>
                 ))}
@@ -701,11 +701,9 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
         <div className="rounded-2xl border border-slate-800 bg-slate-950 p-6 shadow-xl relative overflow-hidden group space-y-5">
           {/* Background color gradient glow based on Token type */}
           <div className={`absolute top-0 right-0 -z-10 h-44 w-44 rounded-full blur-[90px] transition-all duration-500 ${
-            form.tokenType === 'Standard' 
-              ? 'bg-blue-600/10' 
-              : form.tokenType === 'Stablecoin' 
+            form.tokenType === 'Stablecoin' 
               ? 'bg-emerald-600/10' 
-              : 'bg-purple-600/10'
+              : 'bg-blue-600/10'
           }`} />
 
           <div className="flex items-center justify-between border-b border-slate-900 pb-3">
@@ -768,11 +766,9 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
                         />
                       ) : (
                         <div className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ${
-                          form.tokenType === 'Standard' 
-                            ? 'from-blue-600 to-indigo-600' 
-                            : form.tokenType === 'Stablecoin' 
+                          form.tokenType === 'Stablecoin' 
                             ? 'from-emerald-500 to-teal-700' 
-                            : 'from-purple-600 to-pink-600'
+                            : 'from-blue-600 to-indigo-600'
                         } text-xl shadow-lg border border-slate-700`}>
                           {form.logoUrl || '🔮'}
                         </div>
@@ -820,7 +816,7 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
                       {form.blocklist && <span className="rounded-full bg-rose-950/50 border border-rose-900/40 text-rose-400 text-[9px] font-bold px-2 py-0.5">BLOCKLIST</span>}
                       {form.memoSupport && <span className="rounded-full bg-teal-950/50 border border-teal-900/40 text-teal-400 text-[9px] font-bold px-2 py-0.5">MEMO</span>}
                       {!form.mintable && !form.burnable && !form.pausable && !form.allowlist && !form.blocklist && !form.memoSupport && (
-                        <span className="text-xs text-slate-500 italic">None. Pure Standard ERC-20.</span>
+                        <span className="text-xs text-slate-500 italic">None. Pure B20 Base Contract.</span>
                       )}
                     </div>
                   </div>
