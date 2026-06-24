@@ -1,5 +1,5 @@
 import { TokenFormState, TokenType } from '../types';
-import { isAddress } from 'viem';
+import { isAddress, keccak256, toHex } from 'viem';
 import { getB20FactoryConfig } from '../lib/b20/factory';
 import { B20_FACTORY_ABI } from '../lib/b20/constants';
 
@@ -240,15 +240,20 @@ export class B20DeploymentService {
   /**
    * Prepares the full structured token deployment payload
    */
-  public static prepareDeploymentPayload(form: TokenFormState, walletAddress: string | null, chainId?: number): B20DeploymentPayload {
+  public static prepareDeploymentPayload(form: TokenFormState, walletAddress: string | null, chainId?: number, customSalt?: string): B20DeploymentPayload {
     const decimals = Number(form.decimals) || 18;
     const initialSupplyBigInt = BigInt(form.totalSupply || '0') * (10n ** BigInt(decimals));
     const maxSupplyBigInt = BigInt(form.maxSupply || '0') * (10n ** BigInt(decimals));
     const featureFlagsByte = B20DeploymentService.computeFeatureFlagsByte(form);
 
     // Dynamic salt based on owner, symbol, and current millisecond timestamp for uniqueness
-    const saltNum = Math.floor(Math.random() * 1000000);
-    const saltHex = '0x' + saltNum.toString(16).padStart(64, '0');
+    let saltHex: string;
+    if (customSalt) {
+      saltHex = customSalt;
+    } else {
+      const seedStr = `${form.ownerWallet || walletAddress || '0x0000000000000000000000000000000000000000'}-${form.symbol}-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
+      saltHex = keccak256(toHex(seedStr));
+    }
     
     const predictedAddress = B20DeploymentService.predictCreate2Address(
       form.ownerWallet || walletAddress || '',

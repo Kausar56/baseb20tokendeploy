@@ -4,8 +4,8 @@ import { isAddress } from 'viem';
 const SEPOLIA_ENV = (import.meta as any).env?.NEXT_PUBLIC_B20_FACTORY_SEPOLIA || (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_B20_FACTORY_SEPOLIA) || '';
 const MAINNET_ENV = (import.meta as any).env?.NEXT_PUBLIC_B20_FACTORY_MAINNET || (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_B20_FACTORY_MAINNET) || '';
 
-export const B20_FACTORY_SEPOLIA = isAddress(SEPOLIA_ENV) ? (SEPOLIA_ENV as `0x${string}`) : null;
-export const B20_FACTORY_MAINNET = isAddress(MAINNET_ENV) ? (MAINNET_ENV as `0x${string}`) : null;
+export const B20_FACTORY_SEPOLIA = isAddress(SEPOLIA_ENV) ? (SEPOLIA_ENV as `0x${string}`) : '0xB20F000000000000000000000000000000000000' as `0x${string}`;
+export const B20_FACTORY_MAINNET = isAddress(MAINNET_ENV) ? (MAINNET_ENV as `0x${string}`) : '0xB20F000000000000000000000000000000000000' as `0x${string}`;
 
 export const B20_FACTORY_ABI = [
   {

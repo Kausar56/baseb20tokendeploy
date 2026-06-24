@@ -10,7 +10,8 @@ import { isAddress } from 'viem';
 import { TokenFormState, TokenType, DeployedToken } from '../types';
 import { B20DeploymentService } from '../services/b20DeploymentService';
 import { getB20DeploymentPayload } from '../lib/b20/deploy';
-import { B20DeploymentParams } from '../lib/b20/types';
+import { B20DeploymentParams, B20Variant } from '../lib/b20/types';
+import { B20_FACTORY_SEPOLIA, B20_FACTORY_MAINNET } from '../lib/b20/constants';
 
 interface TokenDeployFormProps {
   walletAddress: string | null;
@@ -60,6 +61,8 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
   const [selectedChainId, setSelectedChainId] = useState<number>(84532); // Default to Base Sepolia
   const [showMainnetWarning, setShowMainnetWarning] = useState(false);
   const isCorrectNetwork = isConnected && chainId === selectedChainId;
+  const factoryAddress = B20DeploymentService.getFactoryAddress(selectedChainId);
+  const isFactoryAvailable = !!factoryAddress && isAddress(factoryAddress);
 
   const [deployStatus, setDeployStatus] = useState<'idle' | 'signing' | 'broadcasting' | 'mining' | 'success' | 'failed'>('idle');
   const [txErrorMsg, setTxErrorMsg] = useState<string | null>(null);
@@ -79,9 +82,30 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [activeSalt, setActiveSalt] = useState<string>(() => {
+    const saltBytes = new Uint8Array(32);
+    if (typeof window !== 'undefined' && window.crypto) {
+      window.crypto.getRandomValues(saltBytes);
+    } else {
+      for (let i = 0; i < 32; i++) saltBytes[i] = Math.floor(Math.random() * 256);
+    }
+    return '0x' + Array.from(saltBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  });
+
+  useEffect(() => {
+    const saltBytes = new Uint8Array(32);
+    if (typeof window !== 'undefined' && window.crypto) {
+      window.crypto.getRandomValues(saltBytes);
+    } else {
+      for (let i = 0; i < 32; i++) saltBytes[i] = Math.floor(Math.random() * 256);
+    }
+    const hex = '0x' + Array.from(saltBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+    setActiveSalt(hex);
+  }, [form.name, form.symbol, walletAddress, selectedChainId]);
+
   // Real-time calculations from our B20 deployment service layer
   const validationResult = B20DeploymentService.validateForm(form, walletAddress, selectedChainId);
-  const preparedPayload = B20DeploymentService.prepareDeploymentPayload(form, walletAddress, selectedChainId);
+  const preparedPayload = B20DeploymentService.prepareDeploymentPayload(form, walletAddress, selectedChainId, activeSalt);
   const preparedSummary = B20DeploymentService.generateDeploymentSummary(form, walletAddress, selectedChainId);
   const transactionPreview = B20DeploymentService.generateTransactionPreview(form, preparedPayload, walletAddress, selectedChainId);
 
@@ -250,7 +274,7 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
         featureFlags: featureFlagsByte
       };
 
-      const variant = form.tokenType === 'Stablecoin' ? 1 : 0;
+      const variant = form.tokenType === 'Stablecoin' ? B20Variant.Stablecoin : B20Variant.Asset;
       const salt = preparedPayload.create2Salt as `0x${string}`;
 
       const payload = getB20DeploymentPayload(
@@ -990,35 +1014,43 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
                       <div className="space-y-1 text-[10px] max-h-[140px] overflow-y-auto">
                         <div className="flex justify-between border-b border-slate-950 py-1">
                           <span className="text-slate-500">_name</span>
-                          <span className="text-white font-bold truncate max-w-[200px]">{transactionPreview.functionArguments[0]}</span>
+                          <span className="text-white font-bold truncate max-w-[200px]">{preparedPayload.constructorArgs?.name || ''}</span>
                         </div>
                         <div className="flex justify-between border-b border-slate-950 py-1">
                           <span className="text-slate-500">_symbol</span>
-                          <span className="text-white font-bold">{transactionPreview.functionArguments[1]}</span>
+                          <span className="text-white font-bold">{preparedPayload.constructorArgs?.symbol || ''}</span>
                         </div>
                         <div className="flex justify-between border-b border-slate-950 py-1">
                           <span className="text-slate-500">_decimals</span>
-                          <span className="text-slate-300 font-bold">{transactionPreview.functionArguments[2]}</span>
+                          <span className="text-slate-300 font-bold">{preparedPayload.constructorArgs?.decimals ?? ''}</span>
                         </div>
                         <div className="flex justify-between border-b border-slate-950 py-1">
                           <span className="text-slate-500">_initialSupply</span>
-                          <span className="text-slate-300 font-bold truncate max-w-[150px]">{transactionPreview.functionArguments[3]}</span>
+                          <span className="text-slate-300 font-bold truncate max-w-[150px]">{preparedPayload.constructorArgs?.initialSupply || ''}</span>
                         </div>
                         <div className="flex justify-between border-b border-slate-950 py-1">
                           <span className="text-slate-500">_maxSupply</span>
-                          <span className="text-slate-300 font-bold truncate max-w-[150px]">{transactionPreview.functionArguments[4]}</span>
+                          <span className="text-slate-300 font-bold truncate max-w-[150px]">{preparedPayload.constructorArgs?.maxSupply || ''}</span>
                         </div>
                         <div className="flex justify-between border-b border-slate-950 py-1">
                           <span className="text-slate-500">_treasury</span>
-                          <span className="text-slate-400 select-all font-bold">{transactionPreview.functionArguments[5].slice(0, 10)}...{transactionPreview.functionArguments[5].slice(-6)}</span>
+                          <span className="text-slate-400 select-all font-bold">
+                            {preparedPayload.constructorArgs?.treasury
+                              ? `${preparedPayload.constructorArgs.treasury.slice(0, 10)}...${preparedPayload.constructorArgs.treasury.slice(-6)}`
+                              : ''}
+                          </span>
                         </div>
                         <div className="flex justify-between border-b border-slate-950 py-1">
                           <span className="text-slate-500">_owner</span>
-                          <span className="text-slate-400 select-all font-bold">{transactionPreview.functionArguments[6].slice(0, 10)}...{transactionPreview.functionArguments[6].slice(-6)}</span>
+                          <span className="text-slate-400 select-all font-bold">
+                            {preparedPayload.constructorArgs?.owner
+                              ? `${preparedPayload.constructorArgs.owner.slice(0, 10)}...${preparedPayload.constructorArgs.owner.slice(-6)}`
+                              : ''}
+                          </span>
                         </div>
                         <div className="flex justify-between py-1">
                           <span className="text-slate-500">_featureFlags</span>
-                          <span className="text-blue-400 font-bold">{transactionPreview.functionArguments[7]}</span>
+                          <span className="text-blue-400 font-bold">{preparedPayload.constructorArgs?.featureFlagsByte || ''}</span>
                         </div>
                       </div>
                     </div>
@@ -1134,24 +1166,74 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
           <button
             id="deploy-token-action-btn"
             onClick={triggerDeploy}
-            disabled={!walletAddress || !isCorrectNetwork || !validationResult.isValid}
+            disabled={!walletAddress || !isCorrectNetwork || !validationResult.isValid || !isFactoryAvailable}
             className={`w-full mt-4 flex items-center justify-center space-x-2.5 rounded-xl py-4 font-bold text-white transition-all ${
-              (walletAddress && isCorrectNetwork && validationResult.isValid)
+              (walletAddress && isCorrectNetwork && validationResult.isValid && isFactoryAvailable)
                 ? 'bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-950/40 active:scale-95 cursor-pointer' 
                 : 'bg-slate-900 border border-slate-800 text-slate-500 cursor-not-allowed opacity-60'
             }`}
           >
-            <Play className={`h-4.5 w-4.5 fill-current ${walletAddress && isCorrectNetwork ? 'text-white' : 'text-slate-600'}`} />
+            <Play className={`h-4.5 w-4.5 fill-current ${walletAddress && isCorrectNetwork && isFactoryAvailable ? 'text-white' : 'text-slate-600'}`} />
             <span>
               {!walletAddress 
                 ? 'Deploy Token (Wallet Disconnected)' 
                 : !isCorrectNetwork 
                 ? 'Deploy Token (Unsupported Network)' 
+                : !isFactoryAvailable
+                ? 'Deploy Token (B20 Factory Missing)'
                 : selectedChainId === 84532
                 ? 'Deploy Token on Base Sepolia'
                 : 'Deploy Token on Base Mainnet'}
             </span>
           </button>
+
+          {!isFactoryAvailable && walletAddress && isCorrectNetwork && (
+            <div className="space-y-3 mt-3">
+              <div className="rounded-xl border border-rose-500/30 bg-rose-950/20 p-4 space-y-3.5 text-xs text-rose-300">
+                <div className="flex items-start space-x-2.5">
+                  <ShieldAlert className="h-4.5 w-4.5 shrink-0 mt-0.5 text-rose-400" />
+                  <div className="space-y-1">
+                    <span className="font-bold text-rose-200 block text-sm">B20 Precompile Activation Report</span>
+                    <p className="text-slate-400 leading-relaxed">
+                      The official Base B20 precompile factory address is not available on this network. Please review the environment configuration status below:
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-2 pt-2 border-t border-slate-900 font-mono text-[11px] text-slate-300 bg-black/40 rounded-lg p-3">
+                  <div className="flex justify-between items-center py-0.5">
+                    <span className="text-slate-400">● Factory Address:</span>
+                    <span className="text-rose-400 font-bold">MISSING</span>
+                  </div>
+                  <div className="pl-4 text-[10px] text-slate-500 space-y-0.5">
+                    <div>Base Sepolia: {B20_FACTORY_SEPOLIA || 'Undefined'}</div>
+                    <div>Base Mainnet: {B20_FACTORY_MAINNET || 'Undefined'}</div>
+                  </div>
+
+                  <div className="flex justify-between items-center py-0.5 border-t border-slate-900/60 mt-1.5 pt-1.5">
+                    <span className="text-slate-400">● Factory Contract ABI:</span>
+                    <span className="text-yellow-400 font-bold">UNREGISTERED ON-CHAIN</span>
+                  </div>
+                  <div className="pl-4 text-[10px] text-slate-500 leading-relaxed">
+                    createB20 interface loaded but inactive without sequencer mapping
+                  </div>
+
+                  <div className="flex justify-between items-center py-0.5 border-t border-slate-900/60 mt-1.5 pt-1.5">
+                    <span className="text-slate-400">● Function Signatures:</span>
+                    <span className="text-rose-400 font-bold">DISABLED</span>
+                  </div>
+                  <div className="pl-4 text-[10px] text-slate-500 font-mono">
+                    createB20(uint8 variant, bytes32 salt, bytes params, bytes[] initCalls)
+                  </div>
+                </div>
+                
+                <p className="text-[10px] text-slate-500 italic leading-relaxed">
+                  Note: Deployment requires B20 Activation Registry authorization. Deployment has been disabled.
+                </p>
+              </div>
+            </div>
+          )}
+
 
           {walletAddress && !isCorrectNetwork && (
             <div className="space-y-3 mt-3">
