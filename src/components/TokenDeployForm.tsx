@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, useSwitchChain } from 'wagmi';
+import { isAddress } from 'viem';
 import { TokenFormState, TokenType, DeployedToken } from '../types';
 import { B20DeploymentService } from '../services/b20DeploymentService';
 
@@ -49,7 +50,7 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
   const [deployStep, setDeployStep] = useState(0); // 0: Sign, 1: Broadcast, 2: Deploy, 3: Completed
   const [generatedAddress, setGeneratedAddress] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [previewTab, setPreviewTab] = useState<'visual' | 'technical'>('visual');
+  const [previewTab, setPreviewTab] = useState<'visual' | 'technical' | 'audit'>('visual');
 
   // Actual Web3 Transaction & Deployment State Management
   const { chain, chainId, isConnected } = useAccount();
@@ -209,6 +210,25 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
     setDeployStatus('signing');
     setDeployStep(0);
 
+    const factoryAddress = B20DeploymentService.FACTORY_ADDRESS;
+    console.log("Factory Address", factoryAddress);
+
+    // 1. Validate Factory Address
+    if (!factoryAddress || factoryAddress.trim() === '' || factoryAddress.toLowerCase() === '0xb20fac701726aa36979a7c8e9b67b1406deb2000' || !isAddress(factoryAddress)) {
+      setError("Official B20 Factory Address not configured.");
+      setIsDeploying(false);
+      setDeployStatus('failed');
+      return;
+    }
+
+    // 2. Validate Treasury & Owner Addresses
+    if (!form.treasuryWallet || !isAddress(form.treasuryWallet) || !form.ownerWallet || !isAddress(form.ownerWallet)) {
+      setError("Invalid Ethereum address detected in deployment pipeline.");
+      setIsDeploying(false);
+      setDeployStatus('failed');
+      return;
+    }
+
     try {
       const decimalsNum = Number(form.decimals) || 18;
       const initialSupplyBigInt = BigInt(form.totalSupply || '0') * (10n ** BigInt(decimalsNum));
@@ -219,7 +239,7 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
 
       // Invoke the real Base B20 deployment contract method
       const hash = await writeContractAsync({
-        address: B20DeploymentService.FACTORY_ADDRESS,
+        address: factoryAddress as `0x${string}`,
         abi: [
           {
             name: 'deployB20Token',
@@ -669,13 +689,13 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
                 <div className="space-y-1">
                   <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 block">Owner Wallet</span>
                   <span className="font-mono text-[11px] text-emerald-400 bg-slate-950 border border-slate-900 px-3 py-2 rounded-xl block truncate" title={walletAddress || 'Not Connected'}>
-                    {walletAddress || 'Wallet Not Connected'}
+                    {walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : 'Wallet Not Connected'}
                   </span>
                 </div>
                 <div className="space-y-1">
                   <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 block">Treasury Wallet</span>
                   <span className="font-mono text-[11px] text-emerald-400 bg-slate-950 border border-slate-900 px-3 py-2 rounded-xl block truncate" title={walletAddress || 'Not Connected'}>
-                    {walletAddress || 'Wallet Not Connected'}
+                    {walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : 'Wallet Not Connected'}
                   </span>
                 </div>
               </div>
@@ -723,6 +743,19 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
               >
                 <Cpu className="h-3.5 w-3.5" />
                 <span>Gas & Tx Preview</span>
+              </button>
+              <button
+                type="button"
+                id="audit-preview-tab-btn"
+                onClick={() => setPreviewTab('audit')}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 ${
+                  previewTab === 'audit' 
+                    ? 'bg-blue-600 text-white shadow-md' 
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                }`}
+              >
+                <ShieldCheck className="h-3.5 w-3.5" />
+                <span>Audit Report</span>
               </button>
             </div>
             <span className="inline-flex items-center rounded-full bg-blue-950/50 px-2 py-0.5 text-[9px] font-bold text-blue-400 border border-blue-800/20">

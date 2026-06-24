@@ -67,9 +67,9 @@ export default function App() {
   const { data: balanceData } = useBalance({ address });
   const { openConnectModal } = useConnectModal();
 
-  // Derive shortened address and formatted balance for display
+  // Derive full address and formatted balance for display
   const walletAddress = isConnected && address
-    ? `${address.slice(0, 6)}...${address.slice(-4)}`
+    ? address
     : null;
   const walletBalance = isConnected && balanceData
     ? `${parseFloat(balanceData.formatted).toFixed(4)}`

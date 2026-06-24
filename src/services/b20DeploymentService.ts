@@ -1,4 +1,5 @@
 import { TokenFormState, TokenType } from '../types';
+import { isAddress } from 'viem';
 
 /**
  * Interface representing the prepared deployment payload
@@ -73,7 +74,13 @@ export interface B20TransactionPreview {
 
 export class B20DeploymentService {
   // B20 Standard Factory contract on Base Mainnet
-  public static readonly FACTORY_ADDRESS = '0xB20FAc701726aA36979A7c8e9b67b1406DeB2000';
+  public static readonly FACTORY_ADDRESS = (import.meta.env?.VITE_B20_FACTORY_ADDRESS || '') as string;
+  
+  // B20 Standard Registry contract on Base Mainnet
+  public static readonly REGISTRY_ADDRESS = (import.meta.env?.VITE_B20_REGISTRY_ADDRESS || '') as string;
+
+  // Base network native Sequencer contract
+  public static readonly SEQUENCER_ADDRESS = (import.meta.env?.VITE_B20_SEQUENCER_ADDRESS || '') as string;
   
   // Standard fees in ETH
   private static readonly L1_GAS_FEE = 0.00008;
