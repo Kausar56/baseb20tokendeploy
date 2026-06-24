@@ -141,7 +141,11 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
   };
 
   const handleTypeSelect = (type: TokenType) => {
-    setForm(prev => ({ ...prev, tokenType: type }));
+    setForm(prev => ({ 
+      ...prev, 
+      tokenType: type,
+      decimals: type === 'Asset' ? 18 : 6
+    }));
   };
 
   // Convert uploaded logo to base64
@@ -435,14 +439,19 @@ export default function TokenDeployForm({ walletAddress, onDeploySuccess, onConn
                 <label className="block text-xs font-semibold text-slate-400 mb-1.5" htmlFor="token-decimals">
                   Decimals
                 </label>
-                <input
-                  id="token-decimals"
-                  type="number"
-                  name="decimals"
-                  value={form.decimals}
-                  onChange={handleTextChange}
-                  className="w-full rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3 text-sm text-white outline-none focus:border-blue-500 transition-all font-mono"
-                />
+                <div className="relative">
+                  <input
+                    id="token-decimals"
+                    type="text"
+                    name="decimals"
+                    value={form.decimals}
+                    disabled
+                    className="w-full rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-3 text-sm text-slate-500 outline-none cursor-not-allowed font-mono"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-500 bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded-md">
+                    AUTO
+                  </span>
+                </div>
               </div>
 
               <div>
