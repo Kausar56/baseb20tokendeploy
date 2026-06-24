@@ -160,20 +160,7 @@ export class B20DeploymentService {
       errors.push('Maximum Supply is not a valid large integer value.');
     }
 
-    // Addresses validation
-    const ethAddressRegex = /^0x[a-fA-F0-9]{40}$/;
-    if (!ethAddressRegex.test(form.treasuryWallet)) {
-      errors.push('Treasury Wallet Address must be a valid Ethereum address (e.g. 0x...).');
-    }
-    if (!ethAddressRegex.test(form.ownerWallet)) {
-      errors.push('Owner Admin Wallet Address must be a valid Ethereum address (e.g. 0x...).');
-    }
-
     // Warnings calculation
-    if (form.ownerWallet === form.treasuryWallet && form.treasuryWallet !== '0x5b38...a21f' && form.treasuryWallet.startsWith('0x')) {
-      warnings.push('Setting owner wallet identical to treasury wallet is a minor risk. Consider segregating core custody from deployer admin keys.');
-    }
-
     if (form.mintable && !form.pausable) {
       warnings.push('Token is mintable but not pausable. In the event of keys compromise, new supply emissions cannot be halted.');
     }
